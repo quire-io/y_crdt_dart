@@ -12,7 +12,6 @@
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/utils/doc.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
-import 'package:y_crdt/src/y_crdt_base.dart';
 
 class _Opts {
   bool? gc;
@@ -39,8 +38,8 @@ class ContentDoc implements AbstractContent {
     final doc = this.doc;
     if (doc != null) {
       if (doc.item != null) {
-        logger.e("This document was already integrated as a sub-document. "
-            "You should create a second instance instead with the same guid.");
+        // logger.e("This document was already integrated as a sub-document. "
+        //     "You should create a second instance instead with the same guid.");
       }
       if (!doc.gc) {
         opts.gc = false;

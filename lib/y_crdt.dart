@@ -5,7 +5,6 @@ library y_crdt;
 
 // EXTERNAL
 
-export 'package:y_crdt/src/external/webrtc_signaling.dart';
 export 'package:y_crdt/src/structs/abstract_struct.dart' show AbstractStruct;
 export 'package:y_crdt/src/structs/content_any.dart' show ContentAny;
 export 'package:y_crdt/src/structs/content_binary.dart' show ContentBinary;

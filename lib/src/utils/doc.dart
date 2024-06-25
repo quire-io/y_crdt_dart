@@ -223,7 +223,7 @@ class Doc extends Observable<String> {
    */
   YArray<T> getArray<T>([String name = ""]) {
     // @ts-ignore
-    return this.get<YArray<T>>(name, YArray.create) as YArray<T>;
+    return this.get<YArray<T>>(name, YArray.create);
   }
 
   /**
@@ -234,7 +234,7 @@ class Doc extends Observable<String> {
    */
   YText getText([String name = ""]) {
     // @ts-ignore
-    return this.get<YText>(name, YText.create) as YText;
+    return this.get<YText>(name, YText.create);
   }
 
   /**
@@ -245,7 +245,7 @@ class Doc extends Observable<String> {
    */
   YMap<T> getMap<T>([String name = ""]) {
     // @ts-ignore
-    return this.get<YMap<T>>(name, YMap.create) as YMap<T>;
+    return this.get<YMap<T>>(name, YMap.create);
   }
 
   /**

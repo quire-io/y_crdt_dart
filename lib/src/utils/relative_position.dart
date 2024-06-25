@@ -262,9 +262,6 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
     }
     final res = followRedone(store, rightID);
     final right = res.item;
-    if (right is! Item) {
-      return null;
-    }
     type = /** @type {AbstractType<any>} */ right.parent as AbstractType;
     if (type.innerItem == null || !type.innerItem!.deleted) {
       index = right.deleted || !right.countable ? 0 : res.diff;
@@ -285,7 +282,7 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
         return null;
       }
       final item = followRedone(store, typeID).item;
-      if (item is Item && item.content is ContentType) {
+      if (item.content is ContentType) {
         type = (item.content as ContentType).type;
       } else {
         // struct is garbage collected

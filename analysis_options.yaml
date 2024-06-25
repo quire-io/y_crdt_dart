@@ -1,49 +1,39 @@
-include: package:lint/analysis_options_package.yaml
-
+analyzer:
+  errors:
+    todo: ignore
+    missing_return: ignore
+    missing_enum_constant_in_switch: ignore
+    body_might_complete_normally_nullable: ignore
+language:
+    strict-casts: true
+    strict-raw-types: true
 linter:
   rules:
-    # different
-    prefer_single_quotes: false
-    slash_for_doc_comments: false
-    avoid_print: true
-
-    prefer_is_empty: false
-    prefer_conditional_assignment: false
-    avoid_function_literals_in_foreach_calls: false
-    non_constant_identifier_names: false
-
-    avoid_classes_with_only_static_members: false
-    use_setters_to_change_properties: false
-    prefer_constructors_over_static_methods: false
-    unnecessary_this: false
-    prefer_interpolation_to_compose_strings: false
-    prefer_if_elements_to_conditional_expressions: false
-    unnecessary_brace_in_string_interps: false
-
-    type_annotate_public_apis: true
-    avoid_redundant_argument_values: false
-    # new
-    avoid_unused_constructor_parameters: true
-    prefer_const_constructors: true
-    lines_longer_than_80_chars: true
-    # prefer_single_quotes: true
-
-    avoid_dynamic_calls: true
-    prefer_adjacent_string_concatenation: true
-    unawaited_futures: true
-    use_named_constants: true
-    avoid_renaming_method_parameters: true
-    avoid_equals_and_hash_code_on_mutable_classes: true
-
-analyzer:
-  strong-mode:
-    implicit-casts: false
-    # implicit-dynamic: false
-  exclude:
-    - lib/**.g.dart
-    - lib/**.freezed.dart
-    - lib/generated/**/*
-  errors:
-    missing_return: error
-    unrelated_type_equality_checks: error
-    null_check_on_nullable_type_parameter: warning
+    - annotate_overrides
+    - avoid_empty_else
+    - avoid_init_to_null
+    - avoid_relative_lib_imports
+    #- avoid_return_types_on_setters
+    #- avoid_returning_null
+    #- avoid_slow_async_io
+    - avoid_types_as_parameter_names
+    - avoid_unused_constructor_parameters
+    - camel_case_types
+    - cancel_subscriptions
+    #- close_sinks
+    - collection_methods_unrelated_type
+    # - constant_identifier_names
+    - hash_and_equals
+    - no_duplicate_case_values
+    #- non_constant_identifier_names
+    - null_check_on_nullable_type_parameter
+    - prefer_const_constructors_in_immutables
+    #- prefer_final_fields
+    #- unnecessary_new
+    #- type_init_formals
+    - unnecessary_await_in_return
+    #- unnecessary_brace_in_string_interps
+    - unnecessary_late
+    - test_types_in_equals
+    - unrelated_type_equality_checks
+    - valid_regexps

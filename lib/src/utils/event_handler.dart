@@ -1,6 +1,6 @@
 // import * as f from "lib0/function.js";
 
-import 'package:y_crdt/src/y_crdt_base.dart';
+// import 'package:y_crdt/src/y_crdt_base.dart';
 
 /**
  * General event handler implementation.
@@ -27,7 +27,7 @@ EventHandler<ARG0, ARG1> createEventHandler<ARG0, ARG1>() => EventHandler();
 
 /**
  * Adds an event listener that is called when
- * {@link EventHandler#callEventListeners} is called.
+ * EventHandler#callEventListeners is called.
  *
  * @template ARG0,ARG1
  * @param {EventHandler<ARG0,ARG1>} eventHandler
@@ -46,7 +46,7 @@ void addEventHandlerListener<ARG0, ARG1>(
  * @template ARG0,ARG1
  * @param {EventHandler<ARG0,ARG1>} eventHandler
  * @param {function(ARG0,ARG1):void} f The event handler that was added with
- *                     {@link EventHandler#addEventListener}
+ *                     {EventHandler#addEventListener}
  *
  * @private
  * @function
@@ -57,7 +57,7 @@ void removeEventHandlerListener<ARG0, ARG1>(
   final len = l.length;
   eventHandler.l = l.where((g) => f != g).toList();
   if (len == eventHandler.l.length) {
-    logger.e("[yjs] Tried to remove event handler that doesn't exist.");
+    // logger.e("[yjs] Tried to remove event handler that doesn't exist.");
   }
 }
 
@@ -76,7 +76,7 @@ void removeAllEventHandlerListeners<ARG0, ARG1>(
 
 /**
  * Call all event listeners that were added via
- * {@link EventHandler#addEventListener}.
+ * {EventHandler#addEventListener}.
  *
  * @template ARG0,ARG1
  * @param {EventHandler<ARG0,ARG1>} eventHandler

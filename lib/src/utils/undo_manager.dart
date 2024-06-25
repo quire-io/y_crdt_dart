@@ -107,7 +107,6 @@ StackItem? popStackItem(
                 struct = item;
               }
               if (!struct.deleted &&
-                  struct is Item &&
                   scope.any((type) =>
                       isParentOf(type, /** @type {Item} */ struct as Item))) {
                 itemsToDelete.add(struct);

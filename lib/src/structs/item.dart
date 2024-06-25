@@ -84,7 +84,7 @@ _R followRedone(StructStore store, ID id) {
     item = getItem(store, nextID) as Item;
     diff = nextID.clock - item.id.clock;
     nextID = item.redone;
-  } while (nextID != null && item is Item);
+  } while (nextID != null);
 
   return _R(item, diff);
 }

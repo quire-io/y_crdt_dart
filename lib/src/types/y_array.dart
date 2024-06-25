@@ -44,11 +44,11 @@ class YArrayEvent<T> extends YEvent {
    * @param {YList<T>} yarray The changed type
    * @param {Transaction} transaction The transaction object
    */
-  YArrayEvent(YArray<T> target, Transaction transaction)
-      : _transaction = transaction,
-        super(target, transaction);
+  YArrayEvent(YArray<T> target, Transaction transaction):
+    //_transaction = transaction,
+  super(target, transaction);
 
-  final Transaction _transaction;
+  // final Transaction _transaction;
 }
 
 /**

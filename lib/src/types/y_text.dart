@@ -887,7 +887,7 @@ class YText extends AbstractType<YTextEvent> {
     try {
       /** @type {List<function>} */ (this._pending!).forEach((f) => f());
     } catch (e) {
-      logger.e(e);
+      // logger.e(e);
     }
     this._pending = null;
   }

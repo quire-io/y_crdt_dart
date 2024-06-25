@@ -324,17 +324,17 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
       });
       Object? _err;
       // https://github.com/dart-lang/sdk/issues/30741
-      StackTrace? _stack;
+      // StackTrace? _stack;
       for (var i = 0; i < fs.length; i++) {
         try {
           fs[i]();
-        } catch (e, s) {
+        } catch (e) {
           _err = e;
-          _stack = s;
+          // _stack = s;
         }
       }
       if (_err != null) {
-        logger.e("Exception from observer", _err, _stack);
+        // logger.e("Exception from observer", _err, _stack);
         throw _err;
       }
     } finally {
@@ -382,8 +382,8 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
           transaction.afterState.get(doc.clientID) !=
               transaction.beforeState.get(doc.clientID)) {
         doc.clientID = generateNewClientId();
-        logger.w(
-            'Changed the client-id because another client seems to be using it.');
+        // logger.w(
+        //     'Changed the client-id because another client seems to be using it.');
       }
       // @todo Merge all the transactions into one and provide send the data as a single update message
       doc.emit('afterTransactionCleanup', [transaction, doc]);

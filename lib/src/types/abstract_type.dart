@@ -586,7 +586,7 @@ Iterator<T> typeListCreateIterator<T>(AbstractType type) {
   return TypeListIterator<T>(type.innerStart);
 }
 
-class TypeListIterator<T> extends Iterator<T> {
+class TypeListIterator<T> implements Iterator<T> {
   TypeListIterator(this.n);
   Item? n;
   List<dynamic>? currentContent;

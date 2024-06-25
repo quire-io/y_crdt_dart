@@ -7,6 +7,7 @@ import 'dart:typed_data';
  */
 import 'package:y_crdt/src/utils/observable.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
+// ignore: library_prefixes
 import 'package:y_crdt/y_crdt.dart' as Y;
 
 import "../lib0/decoding.dart" as decoding;
@@ -143,9 +144,7 @@ class Awareness extends Observable<String> {
     if (state == null) {
       removed.add(clientID);
     } else if (prevState == null) {
-      if (state != null) {
-        added.add(clientID);
-      }
+      added.add(clientID);
     } else {
       updated.add(clientID);
       if (!areEqualDeep(prevState, state)) {

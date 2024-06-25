@@ -1,7 +1,5 @@
 // TODO: Put public facing types in this file.
 
-import 'package:logger/logger.dart';
-
 /// Checks if you are awesome. Spoiler: you are.
 class Awesome {
   bool get isAwesome => true;
@@ -23,8 +21,6 @@ extension MapIndex<V> on Iterable<V> {
     return this.map((e) => f(e, _i++));
   }
 }
-
-final logger = Logger();
 
 bool mapsAreEqual<K, V>(Map<K, V>? m1, Map<K, V>? m2) {
   if (m1 == m2) {

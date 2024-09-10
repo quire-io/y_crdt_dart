@@ -218,6 +218,8 @@ void insertNegatedAttributes(
       ContentFormat(key, val),
     );
     left!.integrate(transaction, 0);
+    currPos.right = left;
+    currPos.forward();
   });
 }
 
@@ -328,7 +330,8 @@ void _insertText(
 ) {
   currPos.currentAttributes.forEach((key, val) {
     if (!attributes.containsKey(key)) {
-      attributes[key] = null;
+      //attributes[key] = null;
+      attributes.remove(key);
     }
   });
   final doc = transaction.doc;
@@ -389,13 +392,15 @@ void formatText(
         final key = /** @type {ContentFormat} */ _content.key;
         final value = /** @type {ContentFormat} */ _content.value;
         final attr = attributes[key];
-        if (attributes.containsKey(key)) {
+        if (attr != null) {
           if (equalAttrs(attr, value)) {
             negatedAttributes.remove(key);
           } else {
             negatedAttributes.set(key, value);
           }
           _right.delete(transaction);
+        } else {
+          currPos.currentAttributes.set(key, value);
         }
       } else if (_content is ContentEmbed || _content is ContentString) {
         if (length < _right.length) {
@@ -443,30 +448,47 @@ void formatText(
  *
  * @function
  */
-int cleanupFormattingGap(Transaction transaction, Item _start, Item? end,
-    Map<String, dynamic> startAttributes, Map<String, dynamic> endAttributes) {
-  Item? start = _start;
+int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
+    Map<String, dynamic> startAttributes, Map<String, dynamic> currAttributes) {
+  Item? start = _start,
+    end = start;
+  final endFormats = <String, dynamic>{};
   while (end != null &&
       end.content is! ContentString &&
       end.content is! ContentEmbed) {
     if (!end.deleted && end.content is ContentFormat) {
-      updateCurrentAttributes(
-          endAttributes,
-          /** @type {ContentFormat} */ end.content as ContentFormat);
+      final cf = end.content as ContentFormat;
+      endFormats[cf.key] = cf;
     }
     end = end.right;
   }
   var cleanups = 0;
-  while (start != null && start != end) {
-    if (!start.deleted) {
+  var reachedCurr = false;
+  while (start != end) {
+    if (curr == start) {
+      reachedCurr = true;
+    }
+    if (!start!.deleted) {
       final content = start.content;
       if (content is ContentFormat) {
-        if ((endAttributes.get(content.key)) != content.value ||
-            (startAttributes.get(content.key)) == content.value) {
+        final key = content.key,
+          startAttrValue = startAttributes.get(content.key);
+        if (endFormats.get(key) != content || startAttrValue == content) {
           // Either this format is overwritten or it is not necessary because the attribute already existed.
           start.delete(transaction);
           cleanups++;
+          if (!reachedCurr && currAttributes.get(key) == content.value && startAttrValue != content.value) {
+            if (startAttrValue == null) {
+              currAttributes.remove(key);
+            } else {
+              currAttributes.set(key, startAttrValue);
+            }
+          }
         }
+         if (!reachedCurr && !start.deleted) {
+          updateCurrentAttributes(currAttributes, content);
+        }
+        break;
       }
     }
 
@@ -579,7 +601,7 @@ ItemTextListPosition deleteText(
       start,
       currPos.right,
       startAttrs,
-      {...currPos.currentAttributes},
+      currPos.currentAttributes,
     );
   }
   final parent = /** @type {AbstractType<any>} */

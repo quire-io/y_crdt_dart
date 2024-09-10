@@ -13,3 +13,4 @@ dependencies:
 dev_dependencies:
   lint: any
   test: any
+  dart_quill_delta: any

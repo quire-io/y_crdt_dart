@@ -27,4 +27,19 @@ void main() async {
 
     expect(sDocText.toDelta(), equals(delta.toJson()));
   });
+
+  test('Remove bullet list', () {
+    final id = 'mylist';
+    final delta = Delta.fromJson([
+      {'insert': 'item'},{'insert': '\n', 'attributes': {'list': 'bullet'}}
+    ]);
+
+    final sDocText = y.Doc().getText(id)
+      ..applyDelta(delta.toJson());
+
+    sDocText.applyDelta(Delta.fromJson([
+      {'retain': 4}, {'retain': 1, 'attributes': {'list': null}}]).toJson());
+
+    expect(sDocText.toDelta(), equals([{'insert': 'item\n'}]));
+  });
 }

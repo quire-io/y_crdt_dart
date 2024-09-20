@@ -207,7 +207,7 @@ void insertNegatedAttributes(
   var left = currPos.left;
   final right = currPos.right;
   negatedAttributes.forEach((key, val) {
-    left = Item(
+    final nextFormat = Item(
       createID(ownClientId, getState(doc.store, ownClientId)),
       left,
       left?.lastId,
@@ -217,8 +217,8 @@ void insertNegatedAttributes(
       null,
       ContentFormat(key, val),
     );
-    left!.integrate(transaction, 0);
-    currPos.right = left;
+    nextFormat.integrate(transaction, 0);
+    currPos.right = nextFormat;
     currPos.forward();
   });
 }
@@ -384,7 +384,12 @@ void formatText(
       insertAttributes(transaction, parent, currPos, attributes);
   // iterate until first non-format or null is found
   // delete all formats with attributes[format.key] != null
-  while (length > 0 && currPos.right != null) {
+  // also check the attributes after the first non-format as we do not want to insert redundant negated attributes there
+  // eslint-disable-next-line no-labels
+  while (currPos.right != null
+    && (length > 0 || (negatedAttributes.isNotEmpty
+      && (currPos.right!.deleted 
+      || currPos.right!.content is ContentFormat)))) {
     final _right = currPos.right!;
     if (!_right.deleted) {
       final _content = _right.content;
@@ -392,17 +397,23 @@ void formatText(
         final key = /** @type {ContentFormat} */ _content.key;
         final value = /** @type {ContentFormat} */ _content.value;
         final attr = attributes[key];
-        if (attr != null) {
+        if (attributes.containsKey(key)) {
           if (equalAttrs(attr, value)) {
             negatedAttributes.remove(key);
           } else {
+            if (length == 0) {
+              // no need to further extend negatedAttributes
+              // eslint-disable-next-line no-labels
+              break;
+            }
+
             negatedAttributes.set(key, value);
           }
           _right.delete(transaction);
         } else {
           currPos.currentAttributes.set(key, value);
         }
-      } else if (_content is ContentEmbed || _content is ContentString) {
+      } else {
         if (length < _right.length) {
           getItemCleanStart(transaction,
               createID(_right.id.client, _right.id.clock + length));

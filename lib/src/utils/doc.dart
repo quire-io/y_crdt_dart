@@ -173,11 +173,12 @@ class Doc extends Observable<String> {
     T Function()? typeConstructor,
   ]) {
     if (typeConstructor == null) {
-      if (T.toString() == "AbstractType<YEvent>") {
+      //Type name is wrong when compile to js
+      // if (T.toString() == "AbstractType<YEvent>") {
         typeConstructor = () => AbstractType.create<YEvent>() as T;
-      } else {
-        throw Exception();
-      }
+      // } else {
+      //   throw Exception();
+      // }
     }
     final type = this.share.putIfAbsent(name, () {
       // @ts-ignore
@@ -185,8 +186,10 @@ class Doc extends Observable<String> {
       t.innerIntegrate(this, null);
       return t;
     });
-    if (T.toString() != "AbstractType<YEvent>" && type is! T) {
-      if (type.runtimeType.toString() == "AbstractType<YEvent>") {
+    //Type name is wrong when compile to js
+    // if (T.toString() != "AbstractType<YEvent>" && type is! T) {
+    if (type is! T) {
+      // if (type.runtimeType.toString() == "AbstractType<YEvent>") {
         // @ts-ignore
         final t = typeConstructor();
         t.innerMap = type.innerMap;
@@ -206,12 +209,13 @@ class Doc extends Observable<String> {
         this.share.set(name, t);
         t.innerIntegrate(this, null);
         return t;
-      } else {
-        throw Exception(
-            "Type with the name ${name} has already been defined with a different constructor");
-      }
+      // } else {
+      //   throw Exception(
+      //       "Type with the name ${name} has already been defined with a different constructor");
+      // }
     }
-    return type as T;
+    return type;
+    // return type as T;
   }
 
   /**

@@ -1053,12 +1053,12 @@ class YText extends AbstractType<YTextEvent> {
    *
    * @public
    */
-  void applyDelta(List<Map<String, Object?>> delta, {bool sanitize = true}) {
+  void applyDelta(Iterable<Map<String, dynamic>> delta, {bool sanitize = true}) {
     if (this.doc != null) {
       transact(this.doc!, (transaction) {
         final currPos = ItemTextListPosition(null, this.innerStart, 0, {});
-        for (var i = 0; i < delta.length; i++) {
-          final op = delta[i];
+        var i = 0;
+        for (final op in delta) {
           if (op["insert"] != null) {
             // Quill assumes that the content starts with an empty paragraph.
             // Yjs/Y.Text assumes that it starts empty. We always hide that
@@ -1093,6 +1093,7 @@ class YText extends AbstractType<YTextEvent> {
           } else if (op["delete"] != null) {
             deleteText(transaction, currPos, op["delete"] as int);
           }
+          i++;
         }
       });
     } else {

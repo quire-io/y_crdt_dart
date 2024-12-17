@@ -1079,7 +1079,7 @@ class YText extends AbstractType<YTextEvent> {
                 this,
                 currPos,
                 ins!,
-                (op["attributes"] as Map<String, Object?>?) ?? {},
+                (op["attributes"] as Map?)?.cast() ?? {},
               );
             }
           } else if (op["retain"] != null) {
@@ -1088,7 +1088,7 @@ class YText extends AbstractType<YTextEvent> {
               this,
               currPos,
               op["retain"] as int,
-              (op["attributes"] as Map<String, Object?>?) ?? {},
+              (op["attributes"] as Map?)?.cast() ?? {},
             );
           } else if (op["delete"] != null) {
             deleteText(transaction, currPos, op["delete"] as int);
@@ -1371,7 +1371,7 @@ abstract class DeltaItem {
   DeltaItem._();
 
   static DeltaItem? fromMap(Map<String, Object?> map) {
-    final _attr = map["attributes"] as Map<String, dynamic>?;
+    final _attr = (map["attributes"] as Map?)?.cast<String, dynamic>();
 
     if (map["retain"] is int) {
       DeltaItem.retain(map["retain"] as int, attributes: _attr);

@@ -616,10 +616,10 @@ ItemTextListPosition deleteText(
     );
   }
   final parent = /** @type {AbstractType<any>} */
-      /** @type {Item} */ (currPos.left ?? currPos.right as Item).parent
-          as AbstractType;
-  if (parent.innerSearchMarker != null &&
-      parent.innerSearchMarker!.isNotEmpty) {
+      /** @type {Item} */ (currPos.left ?? currPos.right)?.parent
+          as AbstractType?;
+  if (parent?.innerSearchMarker != null &&
+      parent!.innerSearchMarker!.isNotEmpty) {
     updateMarkerChanges(
         parent.innerSearchMarker!, currPos.index, -startLength + length);
   }

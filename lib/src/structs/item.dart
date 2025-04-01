@@ -445,15 +445,12 @@ class Item extends AbstractStruct {
       this.left = getItemCleanEnd(transaction, store, _origin);
       this.origin = this.left!.lastId;
     }
-    if (this.rightOrigin != null) {
-      this.right = getItemCleanStart(transaction, this.rightOrigin!);
+    if (_rightOrigin != null) {
+      this.right = getItemCleanStart(transaction, _rightOrigin);
       this.rightOrigin = this.right!.id;
     }
-    if (this.left is GC || this.right is GC) {
-      this.parent = null;
-    }
     // only set parent if this shouldn't be garbage collected
-    if (this.parent == null) {
+    if (_parent == null) {
       final _left = this.left;
       if (_left is Item) {
         this.parent = _left.parent;
@@ -464,13 +461,12 @@ class Item extends AbstractStruct {
         this.parent = _right.parent;
         this.parentSub = _right.parentSub;
       }
-    } else if (this.parent is ID) {
-      final parentItem = getItem(store, this.parent as ID);
-      // if (parentItem is GC) {
-      //   this.parent = null;
-      // } else
-      if (parentItem is Item && parentItem.content is ContentType) {
-        // TODO:
+    } else if (_parent is ID) {
+      final parentItem = getItem(store, _parent);
+      //https://github.com/yjs/yjs/commit/6dd26d3b483cfa1c715b34eecda8767fff1c8936#diff-8e03df4677fec8fdd3103498dd8f3114030b2d18bca59ac692a122795103ab82R328-R368
+      if (parentItem is GC) {
+        this.parent = null;
+      } else if (parentItem is Item && parentItem.content is ContentType) {
         this.parent = (parentItem.content as ContentType).type;
       } else {
         this.parent = null;

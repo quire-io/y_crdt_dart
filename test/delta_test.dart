@@ -5,7 +5,7 @@ import "package:test/test.dart";
 import 'package:y_crdt/y_crdt.dart' as y;
 import "package:dart_quill_delta/dart_quill_delta.dart";
 
-void main() async {
+void main() {
   test('table conversion bug', () {
     final id = 'mytable';
     final delta = Delta.fromJson([
@@ -50,5 +50,19 @@ void main() async {
     ytext.applyDelta([{'retain': 2}, { 'insert': 'cc','attributes': { 'bold': true }}]);
     
     expect(ytext.toDelta(), equals([{'insert': 'aaccbb','attributes': { 'bold': true }}]));
+  });
+
+  test('list style', () {
+    final ytext = y.Doc().getText('mydoc');
+    ytext.applyDelta([{'insert': '\n','attributes': { 'list': 'bullet' }}]);
+    ytext.applyDelta([{'insert': '1'}]);
+    ytext.applyDelta([{'retain': 1}, {'insert': '\n','attributes': { 'list': 'bullet' }}]);
+    ytext.applyDelta([{'retain': 2}, {'insert': '2'}]);
+    expect(ytext.toDelta(), equals([
+      {'insert': '1'},
+      {'insert': '\n','attributes': { 'list': 'bullet' }},
+      {'insert': '2',},
+      {'insert': '\n','attributes': { 'list': 'bullet' }},
+      ]));
   });
 }

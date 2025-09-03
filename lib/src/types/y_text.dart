@@ -319,9 +319,8 @@ void _insertText(
   Map<String, Object?> attributes,
 ) {
   currentAttributes.forEach((key, val) {
-    if (attributes[key] == null) {
-      //attributes[key] = null;
-      attributes.remove(key);
+    if (!attributes.containsKey(key)) {
+      attributes[key] = null;
     }
   });
   final doc = transaction.doc;

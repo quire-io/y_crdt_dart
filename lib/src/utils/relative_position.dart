@@ -260,11 +260,10 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
     if (getState(store, rightID.client) <= rightID.clock) {
       return null;
     }
-    final res = followRedone(store, rightID);
-    final right = res.item;
+    final (right, diff) = followRedone(store, rightID);
     type = /** @type {AbstractType<any>} */ right.parent as AbstractType;
     if (type.innerItem == null || !type.innerItem!.deleted) {
-      index = right.deleted || !right.countable ? 0 : res.diff;
+      index = right.deleted || !right.countable ? 0 : diff;
       var n = right.left;
       while (n != null) {
         if (!n.deleted && n.countable) {
@@ -281,7 +280,7 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
         // type does not exist yet
         return null;
       }
-      final item = followRedone(store, typeID).item;
+      final (item, diff) = followRedone(store, typeID);
       if (item.content is ContentType) {
         type = (item.content as ContentType).type;
       } else {

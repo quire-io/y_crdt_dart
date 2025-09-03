@@ -66,11 +66,6 @@ class YArray<T> extends AbstractType<YArrayEvent<T>> with IterableMixin<T> {
      * @private
      */
   List<T>? _prelimContent = [];
-  /**
-     * @type {List<ArraySearchMarker>}
-     */
-  @override
-  List<ArraySearchMarker>? innerSearchMarker = [];
 
   /**
    * Construct a new YArray containing the specified items.
@@ -104,22 +99,6 @@ class YArray<T> extends AbstractType<YArrayEvent<T>> with IterableMixin<T> {
   @override
   YArray<T> innerCopy() {
     return YArray();
-  }
-
-  /**
-   * @return {YList<T>}
-   */
-  @override
-  YArray<T> clone() {
-    final arr = YArray<T>();
-    arr.insert(
-        0,
-        this
-            .toArray()
-            .map((el) => el is AbstractType ? el.clone() : el)
-            .toList()
-            .cast());
-    return arr;
   }
 
   @override
@@ -219,17 +198,6 @@ class YArray<T> extends AbstractType<YArrayEvent<T>> with IterableMixin<T> {
    */
   List<T> toArray() {
     return typeListToArray(this).cast();
-  }
-
-  /**
-   * Transforms this YArray to a JavaScript Array.
-   *
-   * @param {number} [start]
-   * @param {number} [end]
-   * @return {List<T>}
-   */
-  List<T> slice([int start = 0, int? end]) {
-    return typeListSlice(this, start, end ?? this.innerLength).cast();
   }
 
   /**

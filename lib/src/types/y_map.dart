@@ -100,18 +100,6 @@ class YMap<T> extends AbstractType<YMapEvent<T>> {
   }
 
   /**
-   * @return {YMap<T>}
-   */
-  @override
-  YMap<T> clone() {
-    final map = YMap<T>();
-    this.forEach((value, key, _) {
-      map.set(key, value is AbstractType ? value.clone() as T : value);
-    });
-    return map;
-  }
-
-  /**
    * Creates YMapEvent and calls observers.
    *
    * @param {Transaction} transaction

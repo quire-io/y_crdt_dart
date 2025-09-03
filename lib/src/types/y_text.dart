@@ -66,42 +66,37 @@ bool equalAttrs(dynamic a, dynamic b) =>
         a.entries.every((entry) =>
             b.containsKey(entry.key) && b[entry.key] == entry.value));
 
-class ItemTextListPosition {
+class ItemListPosition {
+  Item? left;
+  Item? right;
+  
   /**
    * @param {Item|null} left
    * @param {Item|null} right
-   * @param {number} index
+   */
+  ItemListPosition(this.left, this.right);
+}
+
+class ItemTextListPosition extends ItemListPosition {
+  /**
+   * @param {Item|null} left
+   * @param {Item|null} right
    * @param {Map<string,any>} currentAttributes
    */
   ItemTextListPosition(
-      this.left, this.right, this.index, this.currentAttributes);
-  Item? left;
-  Item? right;
-  int index;
+      super.left, super.right, this.currentAttributes);
   final Map<String, Object?> currentAttributes;
+}
 
+class ItemInsertionResult extends ItemListPosition {
   /**
-   * Only call this if you know that this.right is defined
+   * @param {Item|null} left
+   * @param {Item|null} right
+   * @param {Map<string,any>} negatedAttributes
    */
-  void forward() {
-    final _right = this.right;
-    if (_right == null) {
-      throw Exception('Unexpected case');
-    }
-    if (_right.content is ContentEmbed || _right.content is ContentString) {
-      if (!_right.deleted) {
-        this.index += _right.length;
-      }
-    } else if (_right.content is ContentFormat) {
-      if (!_right.deleted) {
-        updateCurrentAttributes(
-            this.currentAttributes, _right.content as ContentFormat);
-      }
-    }
-
-    this.left = this.right;
-    this.right = this.right!.right;
-  }
+  ItemInsertionResult(
+      super.left, super.right, this.negatedAttributes);
+  final Map<String, Object?> negatedAttributes;
 }
 
 /**
@@ -114,32 +109,28 @@ class ItemTextListPosition {
  * @function
  */
 ItemTextListPosition findNextPosition(
-    Transaction transaction, ItemTextListPosition pos, int count) {
-  var _right = pos.right;
-  while (_right != null && count > 0) {
-    if (_right.content is ContentEmbed || _right.content is ContentString) {
-      if (!_right.deleted) {
-        if (count < _right.length) {
+    Transaction transaction, Map<String, Object?> currentAttributes, Item? left, Item? right, int count) {
+  while (right != null && count > 0) {
+    if (right.content is ContentEmbed || right.content is ContentString) {
+      if (!right.deleted) {
+        if (count < right.length) {
           // split right
           getItemCleanStart(
-              transaction, createID(_right.id.client, _right.id.clock + count));
+              transaction, createID(right.id.client, right.id.clock + count));
         }
-        pos.index += _right.length;
-        count -= _right.length;
+        count -= right.length;
       }
-    } else if (_right.content is ContentFormat) {
-      if (!_right.deleted) {
+    } else if (right.content is ContentFormat) {
+      if (!right.deleted) {
         updateCurrentAttributes(
-            pos.currentAttributes,
-            /** @type {ContentFormat} */ _right.content as ContentFormat);
+            currentAttributes,
+            /** @type {ContentFormat} */ right.content as ContentFormat);
       }
     }
-    pos.left = pos.right;
-    pos.right = _right.right;
-    _right = pos.right;
-    // pos.forward() - we don't forward because that would halve the performance because we already do the checks above
+    left = right;
+    right = right.right;
   }
-  return pos;
+  return ItemTextListPosition(left, right, currentAttributes);
 }
 
 /**
@@ -151,19 +142,9 @@ ItemTextListPosition findNextPosition(
  * @private
  * @function
  */
-ItemTextListPosition findPosition(
-    Transaction transaction, AbstractType parent, int index) {
+ItemTextListPosition findPosition(Transaction transaction, AbstractType parent, int index) {
   final currentAttributes = <String, Object?>{};
-  final marker = findMarker(parent, index);
-  if (marker != null) {
-    final pos = ItemTextListPosition(
-        marker.p.left, marker.p, marker.index, currentAttributes);
-    return findNextPosition(transaction, pos, index - marker.index);
-  } else {
-    final pos =
-        ItemTextListPosition(null, parent.innerStart, 0, currentAttributes);
-    return findNextPosition(transaction, pos, index);
-  }
+  return findNextPosition(transaction, currentAttributes, null, parent.innerStart, index);
 }
 
 /**
@@ -180,34 +161,37 @@ ItemTextListPosition findPosition(
 void insertNegatedAttributes(
   Transaction transaction,
   AbstractType parent,
-  ItemTextListPosition currPos,
+  ItemListPosition currPos,
   Map<String, Object?> negatedAttributes,
 ) {
   // check if we really need to remove attributes
-  var _right = currPos.right;
-  while (_right != null &&
-      (_right.deleted == true ||
-          (_right.content is ContentFormat &&
-              equalAttrs(
-                  negatedAttributes.get(
-                      /** @type {ContentFormat} */ (_right.content
-                              as ContentFormat)
-                          .key),
-                  /** @type {ContentFormat} */ (_right.content as ContentFormat)
-                      .value)))) {
-    if (!_right.deleted) {
+  var right = currPos.right,
+    left = currPos.left;
+
+  /// null null true
+  /// It is false in js
+  /// undefined null false
+  /// need to check negatedAttributes.containsKey(rContent.value)
+  final rContent = right?.content;
+  while (right != null &&
+      (right.deleted ||
+          (rContent is ContentFormat &&
+            (equalAttrs(
+                negatedAttributes.get(rContent.key),
+                /** @type {ContentFormat} */ rContent.value)) 
+              && negatedAttributes.containsKey(rContent.value)))) {
+    if (!right.deleted) {
       negatedAttributes.remove(
-          /** @type {ContentFormat} */ (_right.content as ContentFormat).key);
+          /** @type {ContentFormat} */ (right.content as ContentFormat).key);
     }
-    currPos.forward();
-    _right = currPos.right;
+    left = right;
+    right = right.right;
   }
   final doc = transaction.doc;
   final ownClientId = doc.clientID;
-  var left = currPos.left;
-  final right = currPos.right;
+  
   negatedAttributes.forEach((key, val) {
-    final nextFormat = Item(
+    left = Item(
       createID(ownClientId, getState(doc.store, ownClientId)),
       left,
       left?.lastId,
@@ -217,10 +201,11 @@ void insertNegatedAttributes(
       null,
       ContentFormat(key, val),
     );
-    nextFormat.integrate(transaction, 0);
-    currPos.right = nextFormat;
-    currPos.forward();
+    left!.integrate(transaction, 0);
   });
+
+  currPos.left = left;
+  currPos.right = right;
 }
 
 /**
@@ -249,22 +234,26 @@ void updateCurrentAttributes(
  * @function
  */
 void minimizeAttributeChanges(
-    ItemTextListPosition currPos, Map<String, dynamic> attributes) {
+    ItemListPosition currPos, Map<String, Object?> currentAttributes, Map<String, dynamic> attributes) {
   // go right while attributes[right.key] == right.value (or right is deleted)
+  var right = currPos.right,
+    left = currPos.left;
   while (true) {
-    final _right = currPos.right;
-    if (_right == null) {
+    if (right == null) {
       break;
-    } else if (_right.deleted ||
-        (_right.content is ContentFormat &&
-            equalAttrs(attributes[(_right.content as ContentFormat).key],
-                (_right.content as ContentFormat).value))) {
+    } else if (right.deleted ||
+        (right.content is ContentFormat &&
+            equalAttrs(attributes[(right.content as ContentFormat).key],
+                (right.content as ContentFormat).value))) {
       //
     } else {
       break;
     }
-    currPos.forward();
+    left = right;
+    right = right.right;
   }
+  currPos.left = left;
+  currPos.right = right;
 }
 
 /**
@@ -280,7 +269,8 @@ void minimizeAttributeChanges(
 Map<String, Object?> insertAttributes(
     Transaction transaction,
     AbstractType parent,
-    ItemTextListPosition currPos,
+    ItemListPosition currPos,
+    Map<String, Object?> currentAttributes,
     Map<String, Object?> attributes) {
   final doc = transaction.doc;
   final ownClientId = doc.clientID;
@@ -288,14 +278,14 @@ Map<String, Object?> insertAttributes(
   // insert format-start items
   for (final key in attributes.keys) {
     final val = attributes[key];
-    final currentVal = currPos.currentAttributes.get(key);
+    final currentVal = currentAttributes.get(key);
     if (!equalAttrs(currentVal, val)) {
       // save negated attribute (set null if currentVal undefined)
       negatedAttributes.set(key, currentVal);
       final left = currPos.left;
       final right = currPos.right;
-      currPos.right = Item(
-        createID(ownClientId, getState(doc.store, ownClientId)),
+      currPos.left = Item(
+        createID(ownClientId, getState(doc.store, ownClientId)), 
         left,
         left?.lastId,
         right,
@@ -304,8 +294,7 @@ Map<String, Object?> insertAttributes(
         null,
         ContentFormat(key, val),
       );
-      currPos.right!.integrate(transaction, 0);
-      currPos.forward();
+      currPos.left!.integrate(transaction, 0);
     }
   }
   return negatedAttributes;
@@ -324,39 +313,32 @@ Map<String, Object?> insertAttributes(
 void _insertText(
   Transaction transaction,
   AbstractType parent,
-  ItemTextListPosition currPos,
+  ItemListPosition currPos,
+  Map<String, Object?> currentAttributes,
   Object text,
   Map<String, Object?> attributes,
 ) {
-  currPos.currentAttributes.forEach((key, val) {
-    if (!attributes.containsKey(key)) {
+  currentAttributes.forEach((key, val) {
+    if (attributes[key] == null) {
       //attributes[key] = null;
       attributes.remove(key);
     }
   });
   final doc = transaction.doc;
   final ownClientId = doc.clientID;
-  minimizeAttributeChanges(currPos, attributes);
+  minimizeAttributeChanges(currPos, currentAttributes, attributes);
   final negatedAttributes =
-      insertAttributes(transaction, parent, currPos, attributes);
+      insertAttributes(transaction, parent, currPos, currentAttributes, attributes);
   // insert content
   final content = text is String
       ? ContentString(/** @type {string} */ text)
       : ContentEmbed(text as Map<String, dynamic>);
-  final index = currPos.index;
-  var right = currPos.right;
-  final left = currPos.left;
-  if (parent.innerSearchMarker != null &&
-      parent.innerSearchMarker!.isNotEmpty) {
-    updateMarkerChanges(
-        parent.innerSearchMarker!, currPos.index, content.getLength());
-  }
-  right = Item(createID(ownClientId, getState(doc.store, ownClientId)), left,
-      left?.lastId, right, right?.id, parent, null, content);
-  right.integrate(transaction, 0);
-  currPos.right = right;
-  currPos.index = index;
-  currPos.forward();
+  var right = currPos.right,
+    left = currPos.left;
+
+  currPos.left = Item(createID(ownClientId, getState(doc.store, ownClientId)), 
+    left, left?.lastId, right, right?.id, parent, null, content);
+  currPos.left!.integrate(transaction, 0);
   insertNegatedAttributes(transaction, parent, currPos, negatedAttributes);
 }
 
@@ -373,55 +355,48 @@ void _insertText(
 void formatText(
   Transaction transaction,
   AbstractType parent,
-  ItemTextListPosition currPos,
+  ItemListPosition currPos,
+  Map<String, Object?> currentAttributes,
   int length,
   Map<String, Object?> attributes,
 ) {
   final doc = transaction.doc;
   final ownClientId = doc.clientID;
-  minimizeAttributeChanges(currPos, attributes);
+  minimizeAttributeChanges(currPos, currentAttributes, attributes);
   final negatedAttributes =
-      insertAttributes(transaction, parent, currPos, attributes);
+      insertAttributes(transaction, parent, currPos, currentAttributes, attributes);
+  var right = currPos.right,
+    left = currPos.left;
   // iterate until first non-format or null is found
   // delete all formats with attributes[format.key] != null
-  // also check the attributes after the first non-format as we do not want to insert redundant negated attributes there
-  // eslint-disable-next-line no-labels
-  while (currPos.right != null
-    && (length > 0 || (negatedAttributes.isNotEmpty
-      && (currPos.right!.deleted 
-      || currPos.right!.content is ContentFormat)))) {
-    final _right = currPos.right!;
-    if (!_right.deleted) {
-      final _content = _right.content;
-      if (_content is ContentFormat) {
-        final key = /** @type {ContentFormat} */ _content.key;
-        final value = /** @type {ContentFormat} */ _content.value;
+  while (length > 0 && right != null) {
+    if (!right.deleted) {
+      final content = right.content;
+      if (content is ContentFormat) {
+        final key = /** @type {ContentFormat} */ content.key;
+        final value = /** @type {ContentFormat} */ content.value;
         final attr = attributes[key];
+        // if (attr != null) {
         if (attributes.containsKey(key)) {
           if (equalAttrs(attr, value)) {
             negatedAttributes.remove(key);
           } else {
-            if (length == 0) {
-              // no need to further extend negatedAttributes
-              // eslint-disable-next-line no-labels
-              break;
-            }
-
             negatedAttributes.set(key, value);
           }
-          _right.delete(transaction);
-        } else {
-          currPos.currentAttributes.set(key, value);
+          right.delete(transaction);
         }
+
+        updateCurrentAttributes(currentAttributes, /** @type {ContentFormat} */ content);
       } else {
-        if (length < _right.length) {
+        if (length < right.length) {
           getItemCleanStart(transaction,
-              createID(_right.id.client, _right.id.clock + length));
+              createID(right.id.client, right.id.clock + length));
         }
-        length -= _right.length;
+        length -= right.length;
       }
     }
-    currPos.forward();
+    left = right;
+    right = right.right;
   }
   // Quill just assumes that the editor starts with a newline and that it always
   // ends with a newline. We only insert that newline when a new newline is
@@ -431,18 +406,19 @@ void formatText(
     for (; length > 0; length--) {
       newlines += "\n";
     }
-    currPos.right = Item(
+    left = Item(
         createID(ownClientId, getState(doc.store, ownClientId)),
-        currPos.left,
-        currPos.left?.lastId,
-        currPos.right,
-        currPos.right?.id,
+        left, 
+        left?.lastId, 
+        right, 
+        right?.id, 
         parent,
         null,
         ContentString(newlines));
-    currPos.right!.integrate(transaction, 0);
-    currPos.forward();
+    left.integrate(transaction, 0);
   }
+  currPos.left = left;
+  currPos.right = right;
   insertNegatedAttributes(transaction, parent, currPos, negatedAttributes);
 }
 
@@ -459,45 +435,28 @@ void formatText(
  *
  * @function
  */
-int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
-    Map<String, dynamic> startAttributes, Map<String, dynamic> currAttributes) {
-  Item? start = _start,
-    end = start;
-  final endFormats = <String, dynamic>{};
+int cleanupFormattingGap(Transaction transaction, Item _start, Item? end,
+    Map<String, dynamic> startAttributes, Map<String, dynamic> endAttributes) {
   while (end != null &&
       end.content is! ContentString &&
       end.content is! ContentEmbed) {
     if (!end.deleted && end.content is ContentFormat) {
-      final cf = end.content as ContentFormat;
-      endFormats[cf.key] = cf;
+      updateCurrentAttributes(endAttributes, /** @type {ContentFormat} */ end.content as ContentFormat);
     }
     end = end.right;
   }
   var cleanups = 0;
-  var reachedCurr = false;
+  Item? start = _start;
   while (start != end) {
-    if (curr == start) {
-      reachedCurr = true;
-    }
     if (!start!.deleted) {
       final content = start.content;
       if (content is ContentFormat) {
         final key = content.key,
-          startAttrValue = startAttributes.get(content.key);
-        if (endFormats.get(key) != content || startAttrValue == content) {
+          value = content.value;
+        if (endAttributes.get(key) != value || endAttributes.get(key) == value) {
           // Either this format is overwritten or it is not necessary because the attribute already existed.
           start.delete(transaction);
           cleanups++;
-          if (!reachedCurr && currAttributes.get(key) == content.value && startAttrValue != content.value) {
-            if (startAttrValue == null) {
-              currAttributes.remove(key);
-            } else {
-              currAttributes.set(key, startAttrValue);
-            }
-          }
-        }
-         if (!reachedCurr && !start.deleted) {
-          updateCurrentAttributes(currAttributes, content);
         }
         break;
       }
@@ -514,12 +473,13 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
  */
 void cleanupContextlessFormattingGap(Transaction transaction, Item? item) {
   // iterate until item.right is null or content
-  final _right = item?.right;
-  while (_right != null &&
-      (_right.deleted ||
-          (_right.content is ContentString &&
-              _right.content is ContentEmbed))) {
-    item = _right;
+  var right = item?.right;
+  while (right != null &&
+      (right.deleted ||
+          (right.content is! ContentString &&
+              right.content is! ContentEmbed))) {
+    item = right;
+    right = item.right;
   }
   final attrs = <String>{};
   // iterate back until a content item is found
@@ -587,42 +547,40 @@ int cleanupYTextFormatting(YText type) {
  * @private
  * @function
  */
-ItemTextListPosition deleteText(
-    Transaction transaction, ItemTextListPosition currPos, int length) {
-  final startLength = length;
-  final startAttrs = {...currPos.currentAttributes};
+ItemListPosition deleteText(
+    Transaction transaction, ItemListPosition currPos, 
+    Map<String, Object?> currentAttributes, int length) {
+  final startAttrs = {...currentAttributes};
   final start = currPos.right;
-  while (length > 0 && currPos.right != null) {
-    final _right = currPos.right!;
-    if (_right.deleted == false) {
-      if (_right.content is ContentEmbed || _right.content is ContentString) {
-        if (length < _right.length) {
+  var right = currPos.right,
+    left = currPos.left;
+  while (length > 0 && right != null) {
+    if (right.deleted == false) {
+      if (right.content is ContentFormat) {
+        updateCurrentAttributes(currentAttributes, /** @type {ContentFormat} */ right.content as ContentFormat);
+      } else if (right.content is ContentEmbed || right.content is ContentString) {
+        if (length < right.length) {
           getItemCleanStart(transaction,
-              createID(_right.id.client, _right.id.clock + length));
+              createID(right.id.client, right.id.clock + length));
         }
-        length -= _right.length;
-        _right.delete(transaction);
+        length -= right.length;
+        right.delete(transaction);
       }
     }
-    currPos.forward();
+    left = right;
+    right = right.right;
   }
   if (start != null) {
     cleanupFormattingGap(
       transaction,
       start,
-      currPos.right,
+      right,
       startAttrs,
-      currPos.currentAttributes,
+      {...currentAttributes},
     );
   }
-  final parent = /** @type {AbstractType<any>} */
-      /** @type {Item} */ (currPos.left ?? currPos.right)?.parent
-          as AbstractType?;
-  if (parent?.innerSearchMarker != null &&
-      parent!.innerSearchMarker!.isNotEmpty) {
-    updateMarkerChanges(
-        parent.innerSearchMarker!, currPos.index, -startLength + length);
-  }
+  currPos.left = left;
+  currPos.right = right;
   return currPos;
 }
 
@@ -893,11 +851,6 @@ class YText extends AbstractType<YTextEvent> {
      */
     this._pending = string != null ? [() => this.insert(0, string)] : [];
   }
-  /**
-     * @type {List<ArraySearchMarker>}
-     */
-  @override
-  final List<ArraySearchMarker> innerSearchMarker = [];
 
   List<void Function()>? _pending;
 
@@ -928,16 +881,6 @@ class YText extends AbstractType<YTextEvent> {
   @override
   innerCopy() {
     return YText();
-  }
-
-  /**
-   * @return {YText}
-   */
-  @override
-  clone() {
-    final text = YText();
-    text.applyDelta(this.toDelta());
-    return text;
   }
 
   /**
@@ -976,18 +919,6 @@ class YText extends AbstractType<YTextEvent> {
           break;
         }
       }
-      if (!foundFormattingItem) {
-        iterateDeletedStructs(transaction, transaction.deleteSet, (item) {
-          if (item is GC || foundFormattingItem) {
-            return;
-          }
-          if (item is Item &&
-              item.parent == this &&
-              item.content is ContentFormat) {
-            foundFormattingItem = true;
-          }
-        });
-      }
       transact(doc, (t) {
         if (foundFormattingItem) {
           // If a formatting item was inserted, we simply clean the whole type.
@@ -997,7 +928,7 @@ class YText extends AbstractType<YTextEvent> {
           // If no formatting attribute was inserted, we can make due with contextless
           // formatting cleanups.
           // Contextless: it is not necessary to compute currentAttributes for the affected position.
-          iterateDeletedStructs(t, t.deleteSet, (item) {
+          iterateDeletedStructs(t, transaction.deleteSet, (item) {
             if (item is GC) {
               return;
             }
@@ -1056,7 +987,8 @@ class YText extends AbstractType<YTextEvent> {
   void applyDelta(Iterable<Map<String, dynamic>> delta, {bool sanitize = true}) {
     if (this.doc != null) {
       transact(this.doc!, (transaction) {
-        final currPos = ItemTextListPosition(null, this.innerStart, 0, {});
+        final currPos = ItemListPosition(null, this.innerStart);
+        final currentAttributes = <String, Object?>{};
         var i = 0;
         for (final op in delta) {
           if (op["insert"] != null) {
@@ -1078,6 +1010,7 @@ class YText extends AbstractType<YTextEvent> {
                 transaction,
                 this,
                 currPos,
+                currentAttributes,
                 ins!,
                 (op["attributes"] as Map?)?.cast() ?? {},
               );
@@ -1087,11 +1020,12 @@ class YText extends AbstractType<YTextEvent> {
               transaction,
               this,
               currPos,
+              currentAttributes,
               op["retain"] as int,
               (op["attributes"] as Map?)?.cast() ?? {},
             );
           } else if (op["delete"] != null) {
-            deleteText(transaction, currPos, op["delete"] as int);
+            deleteText(transaction, currPos, currentAttributes, op["delete"] as int);
           }
           i++;
         }
@@ -1239,7 +1173,7 @@ class YText extends AbstractType<YTextEvent> {
   void insert(
     int index,
     String text, [
-    Map<String, Object?>? _attributes,
+    Map<String, Object?>? attributes,
   ]) {
     if (text.length <= 0) {
       return;
@@ -1248,21 +1182,19 @@ class YText extends AbstractType<YTextEvent> {
     if (y != null) {
       transact(y, (transaction) {
         final pos = findPosition(transaction, this, index);
-        final Map<String, Object?> attributes;
-        if (_attributes == null) {
+        if (attributes == null) {
           attributes = {};
           // @ts-ignore
           pos.currentAttributes.forEach((k, v) {
-            attributes[k] = v;
+            attributes![k] = v;
           });
-        } else {
-          attributes = {..._attributes};
         }
-        _insertText(transaction, this, pos, text, attributes);
+        _insertText(transaction, this, ItemListPosition(pos.left, pos.right), 
+          pos.currentAttributes, text, attributes ?? {});
       });
     } else {
       /** @type {List<function>} */ (this._pending!)
-          .add(() => this.insert(index, text, _attributes));
+          .add(() => this.insert(index, text, attributes));
     }
   }
 
@@ -1284,12 +1216,12 @@ class YText extends AbstractType<YTextEvent> {
     // if (embed.constructor != Object) {
     //   throw  Exception("Embed must be an Object");
     // }
-    attributes = attributes == null ? {} : {...attributes};
+    attributes = {...?attributes};
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
         final pos = findPosition(transaction, this, index);
-        _insertText(transaction, this, pos, embed, attributes!);
+        _insertText(transaction, this, ItemListPosition(pos.left, pos.right), pos.currentAttributes, embed, attributes!);
       });
     } else {
       /** @type {List<function>} */ (this._pending!)
@@ -1312,7 +1244,9 @@ class YText extends AbstractType<YTextEvent> {
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
-        deleteText(transaction, findPosition(transaction, this, index), length);
+        final pos = findPosition(transaction, this, index);
+        deleteText(transaction, ItemListPosition(pos.left, pos.right), 
+          pos.currentAttributes, length);
       });
     } else {
       /** @type {List<function>} */ (this._pending!)
@@ -1341,7 +1275,8 @@ class YText extends AbstractType<YTextEvent> {
         if (pos.right == null) {
           return;
         }
-        formatText(transaction, this, pos, length, attributes);
+        formatText(transaction, this, ItemListPosition(pos.left, pos.right), 
+          pos.currentAttributes, length, attributes);
       });
     } else {
       /** @type {List<function>} */ (this._pending!)

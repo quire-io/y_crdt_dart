@@ -13,7 +13,6 @@
 //   ContentDoc, YText, YArray, AbstractUpdateEncoder, Doc, Snapshot, Transaction, EventHandler, YEvent, Item, // eslint-disable-line
 // } from '../internals.js'
 
-import 'dart:math' as math;
 // import * as map from 'lib0/map.js'
 // import * as iterator from 'lib0/iterator.js'
 // import * as error from 'lib0/error.js'
@@ -23,7 +22,6 @@ import 'dart:typed_data';
 
 import 'package:y_crdt/src/structs/content_any.dart';
 import 'package:y_crdt/src/structs/content_binary.dart';
-import 'package:y_crdt/src/structs/content_doc.dart';
 import 'package:y_crdt/src/structs/content_type.dart';
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/utils/doc.dart';
@@ -35,224 +33,6 @@ import 'package:y_crdt/src/utils/transaction.dart';
 import 'package:y_crdt/src/utils/update_encoder.dart';
 import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
-
-const maxSearchMarker = 80;
-
-/**
- * A unique timestamp that identifies each marker.
- *
- * Time is relative,.. this is more like an ever-increasing clock.
- *
- * @type {number}
- */
-int globalSearchMarkerTimestamp = 0;
-
-class ArraySearchMarker {
-  /**
-   * @param {Item} p
-   * @param {number} index
-   */
-  ArraySearchMarker(this.p, this.index)
-      : timestamp = globalSearchMarkerTimestamp++ {
-    p.marker = true;
-  }
-  Item p;
-  int index;
-  int timestamp;
-}
-
-/**
- * @param {ArraySearchMarker} marker
- */
-void refreshMarkerTimestamp(ArraySearchMarker marker) {
-  marker.timestamp = globalSearchMarkerTimestamp++;
-}
-
-/**
- * This is rather complex so this function is the only thing that should overwrite a marker
- *
- * @param {ArraySearchMarker} marker
- * @param {Item} p
- * @param {number} index
- */
-void overwriteMarker(ArraySearchMarker marker, Item p, int index) {
-  marker.p.marker = false;
-  marker.p = p;
-  p.marker = true;
-  marker.index = index;
-  marker.timestamp = globalSearchMarkerTimestamp++;
-}
-
-/**
- * @param {List<ArraySearchMarker>} searchMarker
- * @param {Item} p
- * @param {number} index
- */
-ArraySearchMarker markPosition(
-    List<ArraySearchMarker> searchMarker, Item p, int index) {
-  if (searchMarker.length >= maxSearchMarker) {
-    // override oldest marker (we don't want to create more objects)
-    final marker =
-        searchMarker.reduce((a, b) => a.timestamp < b.timestamp ? a : b);
-    overwriteMarker(marker, p, index);
-    return marker;
-  } else {
-    // create new marker
-    final pm = ArraySearchMarker(p, index);
-    searchMarker.add(pm);
-    return pm;
-  }
-}
-
-/**
- * Search marker help us to find positions in the associative array faster.
- *
- * They speed up the process of finding a position without much bookkeeping.
- *
- * A maximum of `maxSearchMarker` objects are created.
- *
- * This function always returns a refreshed marker (updated timestamp)
- *
- * @param {AbstractType<any>} yarray
- * @param {number} index
- */
-ArraySearchMarker? findMarker(AbstractType yarray, int index) {
-  final _searchMarker = yarray.innerSearchMarker;
-  if (yarray.innerStart == null || index == 0 || _searchMarker == null) {
-    return null;
-  }
-  final marker = _searchMarker.length == 0
-      ? null
-      : _searchMarker.reduce(
-          (a, b) => (index - a.index).abs() < (index - b.index).abs() ? a : b);
-  var p = yarray.innerStart;
-  var pindex = 0;
-  if (marker != null) {
-    p = marker.p;
-    pindex = marker.index;
-    refreshMarkerTimestamp(marker); // we used it, we might need to use it again
-  }
-  // iterate to right if possible
-  if (p == null) {
-    throw Exception("");
-  }
-  while (p != null && p.right != null && pindex < index) {
-    if (!p.deleted && p.countable) {
-      if (index < pindex + p.length) {
-        break;
-      }
-      pindex += p.length;
-    }
-    p = p.right;
-  }
-  // iterate to left if necessary (might be that pindex > index)
-  var pLeft = p?.left;
-  while (pLeft != null && pindex > index) {
-    p = pLeft;
-    pLeft = p.left;
-    if (!p.deleted && p.countable) {
-      pindex -= p.length;
-    }
-  }
-  // we want to make sure that p can't be merged with left, because that would screw up everything
-  // in that cas just return what we have (it is most likely the best marker anyway)
-  // iterate to left until p can't be merged with left
-  pLeft = p?.left;
-  while (p != null &&
-      pLeft != null &&
-      pLeft.id.client == p.id.client &&
-      pLeft.id.clock + pLeft.length == p.id.clock) {
-    p = pLeft;
-    pLeft = p.left;
-    if (!p.deleted && p.countable) {
-      pindex -= p.length;
-    }
-  }
-
-  // @todo remove!
-  // assure position
-  // {
-  //   var start = yarray._start
-  //   var pos = 0
-  //   while (start != p) {
-  //     if (!start.deleted && start.countable) {
-  //       pos += start.length
-  //     }
-  //     start = /** @type {Item} */ (start.right)
-  //   }
-  //   if (pos != pindex) {
-  //     debugger
-  //     throw new Error('Gotcha position fail!')
-  //   }
-  // }
-  // if (marker) {
-  //   if (window.lengthes == null) {
-  //     window.lengthes = []
-  //     window.getLengthes = () => window.lengthes.sort((a, b) => a - b)
-  //   }
-  //   window.lengthes.push(marker.index - pindex)
-  //   console.log('distance', marker.index - pindex, 'len', p && p.parent.length)
-  // }
-  if (p == null) {
-    throw Exception("");
-  }
-  if (marker != null &&
-      (marker.index - pindex).abs() <
-          /** @type {YText|YList<any>} */ (p.parent as AbstractType)
-                  .innerLength /
-              maxSearchMarker) {
-    // adjust existing marker
-    overwriteMarker(marker, p, pindex);
-    return marker;
-  } else {
-    // create new marker
-    return markPosition(yarray.innerSearchMarker!, p, pindex);
-  }
-}
-
-/**
- * Update markers when a change happened.
- *
- * This should be called before doing a deletion!
- *
- * @param {List<ArraySearchMarker>} searchMarker
- * @param {number} index
- * @param {number} len If insertion, len is positive. If deletion, len is negative.
- */
-void updateMarkerChanges(
-    List<ArraySearchMarker> searchMarker, int index, int len) {
-  for (var i = searchMarker.length - 1; i >= 0; i--) {
-    final m = searchMarker[i];
-    if (len > 0) {
-      /**
-       * @type {Item|null}
-       */
-      Item? p = m.p;
-      p.marker = false;
-      // Ideally we just want to do a simple position comparison, but this will only work if
-      // search markers don't point to deleted items for formats.
-      // Iterate marker to prev undeleted countable position so we know what to do when updating a position
-      while (p != null && (p.deleted || !p.countable)) {
-        p = p.left;
-        if (p != null && !p.deleted && p.countable) {
-          // adjust position. the loop should break now
-          m.index -= p.length;
-        }
-      }
-      if (p == null || p.marker == true) {
-        // remove search marker if updated position is null or if position is already marked
-        searchMarker.removeAt(i);
-        continue;
-      }
-      m.p = p;
-      p.marker = true;
-    }
-    if (index < m.index || (len > 0 && index == m.index)) {
-      // a simple index <= m.index check would actually suffice
-      m.index = math.max(index, m.index + len);
-    }
-  }
-}
 
 /**
  * Accumulate all (list) children of a type and return them as an Array.
@@ -331,17 +111,6 @@ class AbstractType<EventType> {
      * @type {EventHandler<List<YEvent>,Transaction>}
      */
   final EventHandler<List<YEvent>, Transaction> innerdEH = createEventHandler();
-  /**
-     * @type {null | List<ArraySearchMarker>}
-     */
-  List<ArraySearchMarker>? innerSearchMarker;
-
-  /**
-   * @return {AbstractType<any>|null}
-   */
-  AbstractType? get parent {
-    return this.innerItem?.parent as AbstractType?;
-  }
 
   /**
    * Integrate this type into the Yjs instance.
@@ -362,13 +131,6 @@ class AbstractType<EventType> {
    * @return {AbstractType<EventType>}
    */
   AbstractType<EventType> innerCopy() {
-    throw UnimplementedError();
-  }
-
-  /**
-   * @return {AbstractType<EventType>}
-   */
-  AbstractType<EventType> clone() {
     throw UnimplementedError();
   }
 
@@ -398,9 +160,7 @@ class AbstractType<EventType> {
    * @param {Set<null|string>} parentSubs Keys changed on this type. `null` if list was modified.
    */
   void innerCallObserver(Transaction transaction, Set<String?> parentSubs) {
-    if (!transaction.local && (this.innerSearchMarker?.isNotEmpty ?? false)) {
-      this.innerSearchMarker!.length = 0;
-    }
+    /* skip if no type is specified */
   }
 
   /**
@@ -446,43 +206,6 @@ class AbstractType<EventType> {
   Object toJSON() {
     throw UnimplementedError();
   }
-}
-
-/**
- * @param {AbstractType<any>} type
- * @param {number} start
- * @param {number} end
- * @return {List<any>}
- *
- * @private
- * @function
- */
-List typeListSlice(AbstractType type, int start, int end) {
-  if (start < 0) {
-    start = type.innerLength + start;
-  }
-  if (end < 0) {
-    end = type.innerLength + end;
-  }
-  var len = end - start;
-  final cs = <dynamic>[];
-  var n = type.innerStart;
-  while (n != null && len > 0) {
-    if (n.countable && !n.deleted) {
-      final c = n.content.getContent();
-      if (c.length <= start) {
-        start -= c.length;
-      } else {
-        for (var i = start; i < c.length && len > 0; i++) {
-          cs.add(c[i]);
-          len--;
-        }
-        start = 0;
-      }
-    }
-    n = n.right;
-  }
-  return cs;
 }
 
 /**
@@ -657,13 +380,7 @@ void typeListForEachSnapshot(AbstractType type,
  * @function
  */
 dynamic typeListGet(AbstractType type, int index) {
-  final marker = findMarker(type, index);
-  var n = type.innerStart;
-  if (marker != null) {
-    n = marker.p;
-    index -= marker.index;
-  }
-  for (; n != null; n = n.right) {
+  for (var n = type.innerStart; n != null; n = n.right) {
     if (!n.deleted && n.countable) {
       if (index < n.length) {
         return n.content.getContent()[index];
@@ -736,17 +453,6 @@ void typeListInsertGenericsAfter(
           ContentBinary(c),
         );
         left!.integrate(transaction, 0);
-      } else if (c is Doc) {
-        left = Item(
-            createID(ownClientId, getState(store, ownClientId)),
-            left,
-            left?.lastId,
-            right,
-            right?.id,
-            parent,
-            null,
-            ContentDoc(/** @type {Doc} */ c));
-        left!.integrate(transaction, 0);
       } else if (c is AbstractType) {
         left = Item(createID(ownClientId, getState(store, ownClientId)), left,
             left?.lastId, right, right?.id, parent, null, ContentType(c));
@@ -775,26 +481,9 @@ void typeListInsertGenerics(
   List<dynamic> content,
 ) {
   if (index == 0) {
-    if (parent.innerSearchMarker != null &&
-        parent.innerSearchMarker!.isNotEmpty) {
-      updateMarkerChanges(parent.innerSearchMarker!, index, content.length);
-    }
     return typeListInsertGenericsAfter(transaction, parent, null, content);
   }
-  final startIndex = index;
-  final marker = findMarker(parent, index);
   var n = parent.innerStart;
-  if (marker != null) {
-    n = marker.p;
-    index -= marker.index;
-    // we need to iterate one to the left so that the algorithm works
-    if (index == 0) {
-      // @todo refactor this as it actually doesn't consider formats
-      n = n
-          .prev; // important! get the left undeleted item so that we can actually decrease index
-      index += (n != null && n.countable && !n.deleted) ? n.length : 0;
-    }
-  }
   for (; n != null; n = n.right) {
     if (!n.deleted && n.countable) {
       if (index <= n.length) {
@@ -807,10 +496,6 @@ void typeListInsertGenerics(
       }
       index -= n.length;
     }
-  }
-  if (parent.innerSearchMarker != null &&
-      parent.innerSearchMarker!.isNotEmpty) {
-    updateMarkerChanges(parent.innerSearchMarker!, startIndex, content.length);
   }
   return typeListInsertGenericsAfter(transaction, parent, n, content);
 }
@@ -830,14 +515,7 @@ void typeListDelete(
   if (length == 0) {
     return;
   }
-  final startIndex = index;
-  final startLength = length;
-  final marker = findMarker(parent, index);
   var n = parent.innerStart;
-  if (marker != null) {
-    n = marker.p;
-    index -= marker.index;
-  }
   // compute the first item to be deleted
   for (; n != null && index > 0; n = n.right) {
     if (!n.deleted && n.countable) {
@@ -862,10 +540,6 @@ void typeListDelete(
   }
   if (length > 0) {
     throw Exception('array length exceeded');
-  }
-  if (parent.innerSearchMarker != null) {
-    updateMarkerChanges(parent.innerSearchMarker!, startIndex,
-        -startLength + length /* in case we remove the above exception */);
   }
 }
 
@@ -916,8 +590,6 @@ void typeMapSet(
       content = ContentAny(<dynamic>[value]);
     } else if (value is Uint8List) {
       content = ContentBinary(/** @type {Uint8Array} */ value);
-    } else if (value is Doc) {
-      content = ContentDoc(/** @type {Doc} */ value);
     } else {
       if (value is AbstractType) {
         content = ContentType(value);

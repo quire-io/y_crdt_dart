@@ -32,7 +32,6 @@ import 'package:y_crdt/src/structs/abstract_struct.dart';
 import 'package:y_crdt/src/structs/content_any.dart';
 import 'package:y_crdt/src/structs/content_binary.dart';
 import 'package:y_crdt/src/structs/content_deleted.dart';
-import 'package:y_crdt/src/structs/content_doc.dart';
 import 'package:y_crdt/src/structs/content_embed.dart';
 import 'package:y_crdt/src/structs/content_format.dart';
 import 'package:y_crdt/src/structs/content_json.dart';
@@ -67,7 +66,7 @@ export 'package:y_crdt/src/structs/content_type.dart' show readContentType;
  * @param {ID} id
  * @return {{item:Item, diff:number}}
  */
-_R followRedone(StructStore store, ID id) {
+(Item, int) followRedone(StructStore store, ID id) {
   /**
    * @type {ID|null}
    */
@@ -86,14 +85,7 @@ _R followRedone(StructStore store, ID id) {
     nextID = item.redone;
   } while (nextID != null);
 
-  return _R(item, diff);
-}
-
-class _R {
-  final Item item;
-  final int diff;
-
-  const _R(this.item, this.diff);
+  return (item, diff);
 }
 
 /**
@@ -105,7 +97,7 @@ class _R {
  * @param {Item|null} item
  * @param {boolean} keep
  */
-void keepItem(item, keep) {
+void keepItem(Item? item, keep) {
   while (item != null && item.keep != keep) {
     item.keep = keep;
     item = /** @type {AbstractType<any>} */ (item.parent as AbstractType)
@@ -361,21 +353,6 @@ class Item extends AbstractStruct {
   int info;
 
   /**
-   * This is used to mark the item as an indexed fast-search marker
-   *
-   * @type {boolean}
-   */
-  set marker(bool isMarked) {
-    if (((this.info & binary.BIT4) > 0) != isMarked) {
-      this.info ^= binary.BIT4;
-    }
-  }
-
-  bool get marker {
-    return (this.info & binary.BIT4) > 0;
-  }
-
-  /**
    * If true, do not garbage collect this Item.
    */
   bool get keep {
@@ -466,10 +443,8 @@ class Item extends AbstractStruct {
       //https://github.com/yjs/yjs/commit/6dd26d3b483cfa1c715b34eecda8767fff1c8936#diff-8e03df4677fec8fdd3103498dd8f3114030b2d18bca59ac692a122795103ab82R328-R368
       if (parentItem is GC) {
         this.parent = null;
-      } else if (parentItem is Item && parentItem.content is ContentType) {
-        this.parent = (parentItem.content as ContentType).type;
       } else {
-        this.parent = null;
+        this.parent = ((parentItem as Item).content as ContentType).type;
       }
     }
     return null;
@@ -541,17 +516,13 @@ class Item extends AbstractStruct {
             if (o.id.client < this.id.client) {
               left = o;
               conflictingItems.clear();
-            } else if (compareIDs(this.rightOrigin, o.rightOrigin)) {
-              // this and o are conflicting and point to the same integration points. The id decides which item comes first.
-              // Since this is to the left of o, we can break here
-              break;
-            } // else, o might be integrated before an item that this conflicts with. If so, we will find it in the next iterations
+            }
           } else if (o.origin != null &&
               itemsBeforeOrigin
                   .contains(getItem(transaction.doc.store, o.origin!))) {
             // use getItem instead of getItemCleanEnd because we don't want / need to split items.
             // case 2
-            if (!conflictingItems
+            if (o.origin == null || !conflictingItems
                 .contains(getItem(transaction.doc.store, o.origin!))) {
               left = o;
               conflictingItems.clear();
@@ -709,6 +680,7 @@ class Item extends AbstractStruct {
       );
 
       addChangedTypeToTransaction(transaction, parent, this.parentSub);
+      transaction.changed.putIfAbsent(parent, Set.new).add(this.parentSub);
       this.content.delete(transaction);
     }
   }
@@ -802,7 +774,7 @@ final contentRefs = [
   readContentFormat, // 6
   readContentType, // 7
   readContentAny, // 8
-  readContentDoc // 9
+  // readContentDoc // 9
 ];
 
 /**

@@ -42,4 +42,13 @@ void main() async {
 
     expect(sDocText.toDelta(), equals([{'insert': 'item\n'}]));
   });
+
+  test('merge style', () {
+    final ytext = y.Doc().getText('mydoc');
+    ytext.applyDelta([{'insert': 'aa','attributes': { 'bold': true }}]);
+    ytext.applyDelta([{'retain': 2}, { 'insert': 'bb','attributes': { 'bold': true }}]);
+    ytext.applyDelta([{'retain': 2}, { 'insert': 'cc','attributes': { 'bold': true }}]);
+    
+    expect(ytext.toDelta(), equals([{'insert': 'aaccbb','attributes': { 'bold': true }}]));
+  });
 }

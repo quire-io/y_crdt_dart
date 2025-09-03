@@ -10,7 +10,6 @@
 // import * as error from "lib0/error.js";
 
 import 'package:y_crdt/src/structs/item.dart';
-import 'package:y_crdt/src/types/abstract_type.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
 
 /**
@@ -81,9 +80,6 @@ class ContentFormat implements AbstractContent {
    */
   @override
   integrate(transaction, item) {
-    // @todo searchmarker are currently unsupported for rich text documents
-    /** @type {AbstractType<any>} */ (item.parent as AbstractType)
-        .innerSearchMarker = null;
   }
 
   /**

@@ -3,7 +3,6 @@ library;
 import "package:test/test.dart";
 
 import 'package:y_crdt/y_crdt.dart' as y;
-import "package:dart_quill_delta/dart_quill_delta.dart";
 
 void main() {
   test('IdDuplicateChange', () {

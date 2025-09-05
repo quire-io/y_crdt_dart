@@ -5,7 +5,7 @@ import "package:test/test.dart";
 import 'package:y_crdt/y_crdt.dart' as y;
 import "package:dart_quill_delta/dart_quill_delta.dart";
 
-void main() async {
+void main() {
   test('table conversion bug', () {
     final id = 'mytable';
     final delta = Delta.fromJson([
@@ -42,4 +42,53 @@ void main() async {
 
     expect(sDocText.toDelta(), equals([{'insert': 'item\n'}]));
   });
+
+  test('merge style', () {
+    final ytext = y.Doc().getText('mydoc');
+    ytext.applyDelta([{'insert': 'aa', 'attributes': { 'bold': true }}]);
+    ytext.applyDelta([{'retain': 2}, { 'insert': 'bb', 'attributes': { 'bold': true }}]);
+    ytext.applyDelta([{'retain': 2}, { 'insert': 'cc', 'attributes': { 'bold': true }}]);
+    
+    expect(ytext.toDelta(), equals([{'insert': 'aaccbb', 'attributes': { 'bold': true }}]));
+  });
+
+  test('list style', () {
+    final ytext = y.Doc().getText('mydoc');
+    ytext.applyDelta([{'insert': '\n','attributes': { 'list': 'bullet' }}]);
+    ytext.applyDelta([{'insert': '1'}]);
+    ytext.applyDelta([{'retain': 1}, {'insert': '\n','attributes': { 'list': 'bullet' }}]);
+    ytext.applyDelta([{'retain': 2}, {'insert': '2'}]);
+    expect(ytext.toDelta(), equals([
+      {'insert': '1'},
+      {'insert': '\n2\n', 'attributes': { 'list': 'bullet' }},
+      ]));
+
+    // expect(ytext.toDelta(), equals([
+    //   {'insert': '1'},
+    //   {'insert': '\n', 'attributes': { 'list': 'bullet' }},
+    //   {'insert': '2'},
+    //   {'insert': '\n', 'attributes': { 'list': 'bullet' }},
+    //   ]));
+  });
+
+
+  test('list sync', () {
+    final text1 = y.Doc().getText('mydoc');
+    final text2 = y.Doc().getText('mydoc');
+
+    text2.applyDelta([{'insert': '12\n'}]);
+    syncDocUpdate(text2.doc!, text1.doc!);
+
+    text1.applyDelta([{'retain': 2}, {'retain': 1, 'attributes': {'list': 'bullet'}},]);
+    syncDocUpdate(text1.doc!, text2.doc!);
+
+    expect(text1.toDelta(), equals(text2.toDelta()));
+  });
+}
+
+void syncDocUpdate(y.Doc source, y.Doc target) {
+  var stateVector = y.encodeStateVector(target),
+    diff = y.encodeStateAsUpdate(source, stateVector);
+
+  y.applyUpdate(target, diff, stateVector);
 }

@@ -185,16 +185,15 @@ void insertNegatedAttributes(
 ) {
   // check if we really need to remove attributes
   var _right = currPos.right;
+  final rContent = _right?.content;
   while (_right != null &&
       (_right.deleted == true ||
-          (_right.content is ContentFormat &&
-              equalAttrs(
+          (rContent is ContentFormat &&
+              (equalAttrs(
                   negatedAttributes.get(
-                      /** @type {ContentFormat} */ (_right.content
-                              as ContentFormat)
-                          .key),
-                  /** @type {ContentFormat} */ (_right.content as ContentFormat)
-                      .value)))) {
+                      /** @type {ContentFormat} */ rContent.key),
+                  /** @type {ContentFormat} */ rContent.value) 
+                  && negatedAttributes.containsKey(rContent.key))))) {
     if (!_right.deleted) {
       negatedAttributes.remove(
           /** @type {ContentFormat} */ (_right.content as ContentFormat).key);

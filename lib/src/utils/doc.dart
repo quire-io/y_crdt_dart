@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
@@ -59,21 +60,54 @@ class Doc extends Observable<String> {
   /**
    * @param {DocOpts} [opts] configuration
    */
-  Doc({
-    String? guid,
-    bool? gc,
-    this.gcFilter = Doc.defaultGcFilter,
-    this.meta,
-    bool? autoLoad,
-  })  : autoLoad = autoLoad ?? false,
-        shouldLoad = autoLoad ?? false,
-        gc = gc ?? true {
-    this.guid = guid ?? _uuid.v4();
+  Doc({String? guid, this.gc = true, this.gcFilter = Doc.defaultGcFilter,
+    this.meta, this.autoLoad = false, this.shouldLoad = true, this.collectionid}): 
+      this.guid = guid ?? _uuid.v4() {
+    this.clientID = generateNewClientId();
+
+    final completer = Completer();
+    this.on('load', (_) {
+      this.isLoaded = true;
+      completer.complete();
+    });
+    whenLoaded = completer.future;
+
+    Future provideSyncedPromise() {
+      final completer = Completer();
+      late EventHandler eventHandler;
+      eventHandler = (List args) {
+        final isSynced = args.firstOrNull;
+        if (isSynced == null || isSynced == true) {
+          this.off('sync', eventHandler);
+          completer.complete();
+        }
+      };
+
+      this.on('sync', eventHandler);
+      
+      return completer.future;
+    }
+
+    this.on('sync', (args) {
+      final isSynced = args.firstOrNull;
+      if (isSynced == false && this.isSynced) {
+        this.whenSynced = provideSyncedPromise();
+      }
+      this.isSynced = isSynced == null || isSynced == true;
+      if (this.isSynced && !this.isLoaded) {
+        this.emit('load', [this]);
+      }
+    });
+
+    this.whenSynced = provideSyncedPromise();
   }
+
+
   final bool gc;
   final bool Function(Item) gcFilter;
   int clientID = generateNewClientId();
-  late final String guid;
+  late String guid;
+  String? collectionid;
   /**
      * @type {Map<string, AbstractType<YEvent>>}
      */
@@ -99,6 +133,36 @@ class Doc extends Observable<String> {
   bool shouldLoad;
   final bool autoLoad;
   final dynamic meta;
+
+  /**
+   * This is set to true when the persistence provider loaded the document from the database or when the `sync` event fires.
+   * Note that not all providers implement this feature. Provider authors are encouraged to fire the `load` event when the doc content is loaded from the database.
+   *
+   * @type {boolean}
+   */
+  bool isLoaded = false;
+
+  /**
+   * This is set to true when the connection provider has successfully synced with a backend.
+   * Note that when using peer-to-peer providers this event may not provide very useful.
+   * Also note that not all providers implement this feature. Provider authors are encouraged to fire
+   * the `sync` event when the doc has been synced (with `true` as a parameter) or if connection is
+   * lost (with false as a parameter).
+   */
+  bool isSynced = false;
+  bool isDestroyed = false;
+
+  /**
+   * Promise that resolves once the document has been loaded from a persistence provider.
+   */
+  late Future whenLoaded;
+  
+  /**
+   * Promise that resolves once the document has been synced with a backend.
+   * This promise is recreated when the connection is lost.
+   * Note the documentation about the `isSynced` property.
+   */  
+  late Future whenSynced;
 
   /**
    * Notify the parent document that you request to load data into this subdocument (if it is a subdocument).
@@ -227,7 +291,7 @@ class Doc extends Observable<String> {
    */
   YArray<T> getArray<T>([String name = ""]) {
     // @ts-ignore
-    return this.get<YArray<T>>(name, YArray.create);
+    return this.get<YArray<T>>(name, YArray.new);
   }
 
   /**
@@ -238,7 +302,7 @@ class Doc extends Observable<String> {
    */
   YText getText([String name = ""]) {
     // @ts-ignore
-    return this.get<YText>(name, YText.create);
+    return this.get<YText>(name, YText.new);
   }
 
   /**
@@ -249,7 +313,7 @@ class Doc extends Observable<String> {
    */
   YMap<T> getMap<T>([String name = ""]) {
     // @ts-ignore
-    return this.get<YMap<T>>(name, YMap.create);
+    return this.get<YMap<T>>(name, YMap.new);
   }
 
   /**
@@ -288,32 +352,24 @@ class Doc extends Observable<String> {
    */
   @override
   void destroy() {
+    this.isDestroyed = true;
     this.subdocs.toList().forEach((subdoc) => subdoc.destroy());
     final item = this.item;
     if (item != null) {
       this.item = null;
-      final content = item.content;
-      if (item.deleted) {
-        // @ts-ignore
-        if (content is ContentDoc) {
-          content.doc = null;
-        }
-      } else {
-        if (content is! ContentDoc) {
-          throw Exception();
-        }
-        content.doc = Doc(
-          guid: this.guid,
-          autoLoad: content.opts.autoLoad,
-          gc: content.opts.gc,
-          meta: content.opts.meta,
-        );
-        content.doc!.item = item;
-      }
+      final content = item.content as ContentDoc;
+      content.doc = Doc(
+        guid: this.guid,
+        gc: content.opts.gc ?? true, 
+        autoLoad: content.opts.autoLoad ?? false,
+        meta: content.opts.meta,
+        shouldLoad: false
+      );
+      content.doc!.item = item;
       globalTransact(
           /** @type {any} */ (item.parent as AbstractType).doc!, (transaction) {
         if (!item.deleted) {
-          transaction.subdocsAdded.add((content as ContentDoc).doc!);
+          transaction.subdocsAdded.add(content.doc!);
         }
         transaction.subdocsRemoved.add(this);
       }, null, true);
@@ -321,23 +377,5 @@ class Doc extends Observable<String> {
     this.emit("destroyed", [true]);
     this.emit("destroy", [this]);
     super.destroy();
-  }
-
-  /**
-   * @param {string} eventName
-   * @param {function(...any):any} f
-   */
-  @override
-  void on(String eventName, void Function(List<dynamic>) f) {
-    super.on(eventName, f);
-  }
-
-  /**
-   * @param {string} eventName
-   * @param {function} f
-   */
-  @override
-  void off(String eventName, void Function(List<dynamic>) f) {
-    super.off(eventName, f);
   }
 }

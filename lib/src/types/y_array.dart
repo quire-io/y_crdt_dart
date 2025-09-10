@@ -59,7 +59,6 @@ class YArrayEvent<T> extends YEvent {
  */
 class YArray<T> extends AbstractType<YArrayEvent<T>> with IterableMixin<T> {
   YArray();
-  static YArray<T> create<T>() => YArray<T>();
 
   /**
      * @type {List<any>?}

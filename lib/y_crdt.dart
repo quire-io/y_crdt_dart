@@ -49,10 +49,7 @@ export 'package:y_crdt/src/utils/encoding.dart'
         encodeStateAsUpdateV2,
         encodeStateVector,
         encodeStateVectorV2,
-        decodeStateVector,
-        decodeStateVectorV2,
-        useV2Encoding,
-        useV1Encoding;
+        decodeStateVector;
 export 'package:y_crdt/src/utils/id.dart'
     show ID, compareIDs, createID, findRootTypeKey;
 export 'package:y_crdt/src/utils/is_parent_of.dart' show isParentOf;
@@ -89,7 +86,7 @@ export 'package:y_crdt/src/utils/transaction.dart'
     show transact, Transaction, tryGc;
 export 'package:y_crdt/src/utils/undo_manager.dart' show UndoManager;
 export 'package:y_crdt/src/utils/y_event.dart'
-    show YEvent, YChanges, YDelta, YChange, YChangeType;
+    show YEvent, YChanges, YChange, YChangeType;
 export 'package:y_crdt/src/y_crdt_base.dart';
 
 //   YXmlText as XmlText,

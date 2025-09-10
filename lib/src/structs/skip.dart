@@ -1,24 +1,26 @@
 // import {
 //   AbstractStruct,
-//   addStruct,
-//   AbstractUpdateEncoder,
-//   StructStore,
-//   Transaction,
-//   ID, // eslint-disable-line
-// } from "../internals.js";
+//   UpdateEncoderV1, UpdateEncoderV2, StructStore, Transaction, ID // eslint-disable-line
+// } from '../internals.js'
+
+import 'package:y_crdt/src/lib0/encoding.dart' as encoding;
+// import * as error from 'lib0/error'
+// import * as encoding from 'lib0/encoding'
 
 import 'package:y_crdt/src/structs/abstract_struct.dart';
 import 'package:y_crdt/src/utils/struct_store.dart';
 import 'package:y_crdt/src/utils/transaction.dart';
 import 'package:y_crdt/src/utils/update_encoder.dart';
 
-const structGCRefNumber = 0;
+
+const structSkipRefNumber = 10;
 
 /**
  * @private
  */
-class GC extends AbstractStruct {
-  GC(super.id, super.length);
+class Skip extends AbstractStruct {
+
+  Skip(super.id, super.length);
 
   @override
   bool get deleted {
@@ -28,11 +30,14 @@ class GC extends AbstractStruct {
   void delete() {}
 
   /**
-   * @param {GC} right
+   * @param {Skip} right
    * @return {boolean}
    */
   @override
   bool mergeWith(AbstractStruct right) {
+    if (right is! Skip) {
+      return false;
+    }
     this.length += right.length;
     return true;
   }
@@ -43,21 +48,19 @@ class GC extends AbstractStruct {
    */
   @override
   void integrate(Transaction transaction, int offset) {
-    if (offset > 0) {
-      this.id.clock += offset;
-      this.length -= offset;
-    }
-    addStruct(transaction.doc.store, this);
+    // skip structs cannot be integrated
+    throw Exception('Unexpected case');
   }
 
   /**
-   * @param {AbstractUpdateEncoder} encoder
+   * @param {UpdateEncoderV1 | UpdateEncoderV2} encoder
    * @param {number} offset
    */
   @override
   void write(AbstractUpdateEncoder encoder, int offset) {
-    encoder.writeInfo(structGCRefNumber);
-    encoder.writeLen(this.length - offset);
+    encoder.writeInfo(structSkipRefNumber);
+    // write as VarUint because Skips can't make use of predictable length-encoding
+    encoding.writeVarUint(encoder.restEncoder, this.length - offset);
   }
 
   /**

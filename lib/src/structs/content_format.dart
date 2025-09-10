@@ -22,8 +22,8 @@ class ContentFormat implements AbstractContent {
    * @param {Object} value
    */
   ContentFormat(this.key, this.value);
-  final String key;
-  final Object? value;
+  String key;
+  Object? value;
 
   /**
    * @return {number}

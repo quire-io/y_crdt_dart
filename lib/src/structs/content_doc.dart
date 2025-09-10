@@ -13,9 +13,9 @@ import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/utils/doc.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
 
-class _Opts {
+class Opts {
   bool? gc;
-  bool? autoLoad;
+  bool? autoLoad, shouldLoad;
   dynamic meta;
 
   Map<String, dynamic> toMap() {
@@ -23,9 +23,19 @@ class _Opts {
       "gc": gc,
       "autoLoad": autoLoad,
       "meta": meta,
+      "shouldLoad": shouldLoad,
     };
   }
 }
+
+/**
+ * @param {string} guid
+ * @param {Object<string, any>} opts
+ */
+Doc createDocFromOpts(String guid, Opts opts) 
+  => Doc(guid: guid, gc: opts.gc ?? true, 
+      autoLoad: opts.autoLoad ?? false, meta: opts.meta,
+      shouldLoad: (opts.shouldLoad ?? false) || (opts.autoLoad ?? false) || false );
 
 /**
  * @private
@@ -60,7 +70,7 @@ class ContentDoc implements AbstractContent {
      * @type {any}
      */
 
-  final opts = _Opts();
+  Opts opts = Opts();
 
   /**
    * @return {number}
@@ -91,7 +101,7 @@ class ContentDoc implements AbstractContent {
    */
   @override
   copy() {
-    return ContentDoc(this.doc);
+    return ContentDoc(createDocFromOpts(this.doc!.guid, this.opts));
   }
 
   /**
@@ -175,11 +185,12 @@ class ContentDoc implements AbstractContent {
 ContentDoc readContentDoc(AbstractUpdateDecoder decoder) {
   final guid = decoder.readString();
   final params = decoder.readAny();
+  // return ContentDoc(createDocFromOpts(decoder.readString(), decoder.readAny()));
   return ContentDoc(
     Doc(
       guid: guid,
-      autoLoad: params["autoLoad"] as bool?,
-      gc: params["gc"] as bool?,
+      autoLoad: params["autoLoad"] as bool? ?? false,
+      gc: params["gc"] as bool? ?? true,
       gcFilter:
           (params["gcFilter"] ?? Doc.defaultGcFilter) as bool Function(Item),
       meta: params["meta"],

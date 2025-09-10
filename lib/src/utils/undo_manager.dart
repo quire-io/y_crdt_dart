@@ -93,9 +93,7 @@ StackItem? popStackItem(
           iterateStructs(transaction, structs!, startClock, len, (struct) {
             if (struct is Item) {
               if (struct.redone != null) {
-                final _v = followRedone(store, struct.id);
-                var item = _v.item;
-                final diff = _v.diff;
+                var (item, diff) = followRedone(store, struct.id);
                 if (diff > 0) {
                   item = getItemCleanStart(transaction,
                       createID(item.id.client, item.id.clock + diff));

@@ -19,7 +19,7 @@ class ContentEmbed implements AbstractContent {
    * @param {Object} embed
    */
   ContentEmbed(this.embed);
-  final Map<String, dynamic> embed;
+  Map<String, dynamic> embed;
 
   /**
    * @return {number}

@@ -67,7 +67,7 @@ export 'package:y_crdt/src/structs/content_type.dart' show readContentType;
  * @param {ID} id
  * @return {{item:Item, diff:number}}
  */
-_R followRedone(StructStore store, ID id) {
+(Item, int) followRedone(StructStore store, ID id) {
   /**
    * @type {ID|null}
    */
@@ -86,14 +86,7 @@ _R followRedone(StructStore store, ID id) {
     nextID = item.redone;
   } while (nextID != null);
 
-  return _R(item, diff);
-}
-
-class _R {
-  final Item item;
-  final int diff;
-
-  const _R(this.item, this.diff);
+  return (item, diff);
 }
 
 /**

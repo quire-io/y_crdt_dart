@@ -60,15 +60,10 @@ void main() {
     ytext.applyDelta([{'retain': 2}, {'insert': '2'}]);
     expect(ytext.toDelta(), equals([
       {'insert': '1'},
-      {'insert': '\n2\n', 'attributes': { 'list': 'bullet' }},
+      {'insert': '\n', 'attributes': { 'list': 'bullet' }},
+      {'insert': '2'},
+      {'insert': '\n', 'attributes': { 'list': 'bullet' }},
       ]));
-
-    // expect(ytext.toDelta(), equals([
-    //   {'insert': '1'},
-    //   {'insert': '\n', 'attributes': { 'list': 'bullet' }},
-    //   {'insert': '2'},
-    //   {'insert': '\n', 'attributes': { 'list': 'bullet' }},
-    //   ]));
   });
 
 

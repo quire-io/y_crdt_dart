@@ -14,6 +14,7 @@
 //   Transaction,
 //   ID, // eslint-disable-line
 // } from "../internals.js";
+import 'dart:typed_data';
 
 import 'package:y_crdt/src/lib0/decoding.dart' as decoding;
 import 'package:y_crdt/src/lib0/encoding.dart' as encoding;
@@ -80,6 +81,14 @@ void iterateDeletedStructs(Transaction transaction, DeleteSet ds,
       for (var i = 0; i < deletes.length; i++) {
         final del = deletes[i];
         iterateStructs(transaction, structs!, del.clock, del.len, f);
+      }
+
+      if (structs != null) {
+        final lastStruct = structs[structs.length - 1],
+          clockState = lastStruct.id.clock + lastStruct.length;
+        for (var i = 0, del = deletes[i]; i < deletes.length && del.clock < clockState; del = deletes[++i]) {
+          iterateStructs(transaction, structs, del.clock, del.len, f);
+        }
       }
     });
 
@@ -215,12 +224,9 @@ DeleteSet createDeleteSetFromStructStore(StructStore ss) {
       if (struct.deleted) {
         final clock = struct.id.clock;
         var len = struct.length;
-        for (; i + 1 < structs.length; i++) {
-          final next = structs[i + 1];
-          if (next.id.clock == clock + len && next.deleted) {
+        if (i + 1 < structs.length) {
+          for (var next = structs[i + 1]; i + 1 < structs.length && next.deleted; next = structs[++i + 1]) {
             len += next.length;
-          } else {
-            break;
           }
         }
         dsitems.add(DeleteItem(clock, len));
@@ -242,7 +248,12 @@ DeleteSet createDeleteSetFromStructStore(StructStore ss) {
  */
 void writeDeleteSet(AbstractDSEncoder encoder, DeleteSet ds) {
   encoding.writeVarUint(encoder.restEncoder, ds.clients.length);
-  ds.clients.forEach((client, dsitems) {
+  final list = ds.clients.entries.toList();
+  list.sort((a, b) => a.key - b.key);
+
+  for (final en in list) {
+    final client = en.key;
+    final dsitems = en.value;
     encoder.resetDsCurVal();
     encoding.writeVarUint(encoder.restEncoder, client);
     final len = dsitems.length;
@@ -252,7 +263,7 @@ void writeDeleteSet(AbstractDSEncoder encoder, DeleteSet ds) {
       encoder.writeDsClock(item.clock);
       encoder.writeDsLen(item.len);
     }
-  });
+  }
 }
 
 /**
@@ -287,11 +298,12 @@ DeleteSet readDeleteSet(AbstractDSDecoder decoder) {
  * @param {AbstractDSDecoder} decoder
  * @param {Transaction} transaction
  * @param {StructStore} store
+ * @return {Uint8Array|null} Returns a v2 update containing all deletes that couldn't be applied yet; or null if all deletes were applied successfully.
  *
  * @private
  * @function
  */
-void readAndApplyDeleteSet(
+Uint8List? readAndApplyDeleteSet(
     AbstractDSDecoder decoder, Transaction transaction, StructStore store) {
   final unappliedDS = DeleteSet();
   final numClients = decoding.readVarUint(decoder.restDecoder);
@@ -346,10 +358,34 @@ void readAndApplyDeleteSet(
     }
   }
   if (unappliedDS.clients.length > 0) {
-    // TODO: no need for encoding+decoding ds anymore
-    final unappliedDSEncoder = DSEncoderV2();
-    writeDeleteSet(unappliedDSEncoder, unappliedDS);
-    store.pendingDeleteReaders.add(
-        DSDecoderV2(decoding.createDecoder(unappliedDSEncoder.toUint8Array())));
+    final ds = DSEncoderV2();
+    encoding.writeVarUint(ds.restEncoder, 0); // encode 0 structs
+    writeDeleteSet(ds, unappliedDS);
+    return ds.toUint8Array();
   }
+
+  return null;
+}
+
+/**
+ * @param {DeleteSet} ds1
+ * @param {DeleteSet} ds2
+ */
+bool equalDeleteSets(DeleteSet ds1, DeleteSet ds2) {
+  if (ds1.clients.length != ds2.clients.length) return false;
+  for (final en in ds1.clients.entries) {
+    final client = en.key, 
+      deleteItems1 = en.value,
+      deleteItems2 = ds2.clients[client];
+
+    if (deleteItems2 == null || deleteItems1.length != deleteItems2.length) return false;
+    for (var i = 0; i < deleteItems1.length; i++) {
+      final di1 = deleteItems1[i],
+        di2 = deleteItems2[i];
+      if (di1.clock != di2.clock || di1.len != di2.len) {
+        return false;
+      }
+    }
+  }
+  return true;
 }

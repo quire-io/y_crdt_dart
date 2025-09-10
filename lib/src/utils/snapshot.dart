@@ -115,7 +115,7 @@ Uint8List encodeSnapshotV2(Snapshot snapshot, AbstractDSEncoder? encoder) {
  * @return {Uint8Array}
  */
 Uint8List encodeSnapshot(Snapshot snapshot) =>
-    encodeSnapshotV2(snapshot, DefaultDSEncoder());
+    encodeSnapshotV2(snapshot, DSEncoderV1());
 
 /**
  * @param {Uint8Array} buf

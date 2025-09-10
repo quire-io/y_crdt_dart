@@ -55,7 +55,6 @@ class YMapEvent<T> extends YEvent {
  * @implements {Iterable<T>}
  */
 class YMap<T> extends AbstractType<YMapEvent<T>> {
-  static YMap<T> create<T>() => YMap<T>();
   /**
    *
    * @param {Iterable<readonly [string, any]>=} entries - an optional iterable to initialize the YMap

@@ -13,7 +13,7 @@ import 'package:y_crdt/src/y_crdt_base.dart';
 // } from "../internals.js";
 
 abstract class AbstractDSEncoder {
-  final restEncoder = encoding.createEncoder();
+  encoding.Encoder restEncoder = encoding.createEncoder();
 
   /**
    * @return {Uint8Array}
@@ -110,9 +110,9 @@ abstract class AbstractUpdateEncoder extends AbstractDSEncoder {
 
 class DSEncoderV1 implements AbstractDSEncoder {
   @override
-  final restEncoder = encoding.Encoder();
+  encoding.Encoder restEncoder = encoding.Encoder();
 
-  static DSEncoderV1 create() => DSEncoderV1();
+  static AbstractDSEncoder create() => DSEncoderV1();
 
   @override
   Uint8List toUint8Array() {
@@ -249,7 +249,7 @@ class DSEncoderV2 implements AbstractDSEncoder {
   static DSEncoderV2 create() => DSEncoderV2();
   // encodes all the rest / non-optimized
   @override
-  final restEncoder = encoding.Encoder();
+  encoding.Encoder restEncoder = encoding.Encoder();
   int dsCurrVal = 0;
 
   @override

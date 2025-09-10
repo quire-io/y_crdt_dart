@@ -116,7 +116,7 @@ class Transaction {
      * Whether this change originates from this doc.
      * @type {boolean}
      */
-  final bool local;
+  bool local;
   /**
      * @type {Set<Doc>}
      */
@@ -129,6 +129,8 @@ class Transaction {
      * @type {Set<Doc>}
      */
   final subdocsLoaded = <Doc>{};
+
+  bool innerNeedFormattingCleanup = false;
 }
 
 /**
@@ -388,7 +390,7 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
       // @todo Merge all the transactions into one and provide send the data as a single update message
       doc.emit('afterTransactionCleanup', [transaction, doc]);
       if (doc.innerObservers.containsKey('update')) {
-        final encoder = DefaultUpdateEncoder();
+        final encoder = UpdateEncoderV1();
         final hasContent =
             writeUpdateMessageFromTransaction(encoder, transaction);
         if (hasContent) {

@@ -1,4 +1,5 @@
-import 'dart:html';
+import 'dart:js_interop';
+import 'package:web/web.dart';
 
 import 'broadcast_channel_web_base.dart';
 
@@ -87,9 +88,9 @@ Channel getChannel(String room) => channels.putIfAbsent(room, () {
       /**
      * @param {{data:ArrayBuffer}} e
      */
-      bc.onMessage.listen(
-        (e) => subs.forEach((sub) => sub(e.data)),
-      );
+      bc.onmessage = (MessageEvent e) {
+        subs.forEach((sub) => sub(e.data));
+      }.toJS;
       return Channel(
         bc,
         subs,
@@ -133,7 +134,7 @@ class BroadcastChannelWebJs implements BroadcastChannelWeb {
   @override
   void publish(String room, Object data) {
     final c = getChannel(room);
-    c.bc.postMessage(data);
+    c.bc.postMessage(data.jsify());
     c.subs.forEach((sub) => sub(data));
   }
 }

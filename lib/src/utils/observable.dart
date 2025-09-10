@@ -1,5 +1,7 @@
 import 'package:y_crdt/src/y_crdt_base.dart';
 
+
+typedef EventHandler = void Function(List<dynamic> args);
 /**
  * Handles named events.
  *

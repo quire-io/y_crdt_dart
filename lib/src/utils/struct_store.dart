@@ -10,19 +10,21 @@
 // import * as math from "lib0/math.js";
 // import * as error from "lib0/error.js";
 
+import 'dart:typed_data';
+
 import 'package:y_crdt/src/structs/abstract_struct.dart';
 import 'package:y_crdt/src/structs/gc.dart';
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/utils/id.dart';
 import 'package:y_crdt/src/utils/transaction.dart';
-import 'package:y_crdt/src/utils/update_decoder.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
 
-class PendingStructRef {
-  int i;
-  List<AbstractStruct> refs;
+class PendingStructs {
 
-  PendingStructRef({required this.i, required this.refs});
+  final Map<int, int> missing;
+  Uint8List update;
+
+  PendingStructs({required this.missing, required this.update});
 }
 
 class StructStore {
@@ -31,24 +33,15 @@ class StructStore {
      */
   final clients = <int, List<AbstractStruct>>{};
   /**
-     * Store incompleted struct reads here
-     * `i` denotes to the next read operation
-     * We could shift the array of refs instead, but shift is incredible
-     * slow in Chrome for arrays with more than 100k elements
-     * @see tryResumePendingStructRefs
-     * @type {Map<number,{i:number,refs:List<GC|Item>}>}
+     * @type {null | { missing: Map<number, number>, update: Uint8Array }}
      */
-  final pendingClientsStructRefs = <int, PendingStructRef>{};
+  PendingStructs? pendingStructs;
   /**
      * Stack of pending structs waiting for struct dependencies
      * Maximum length of stack is structReaders.size
      * @type {List<GC|Item>}
      */
-  final pendingStack = <AbstractStruct>[];
-  /**
-     * @type {List<DSDecoderV2>}
-     */
-  List<DSDecoderV2> pendingDeleteReaders = [];
+  Uint8List? pendingDs;
 }
 
 /**

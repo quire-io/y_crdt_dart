@@ -52,6 +52,7 @@ import 'package:y_crdt/src/utils/update_decoder.dart';
 import 'package:y_crdt/src/utils/update_encoder.dart';
 import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
+import 'package:y_crdt/y_crdt.dart' show AbstractStruct;
 
 /**
  * @param {any} a
@@ -84,23 +85,24 @@ class ItemTextListPosition {
    * Only call this if you know that this.right is defined
    */
   void forward() {
-    final _right = this.right;
-    if (_right == null) {
+    final right = this.right;
+    if (right == null) {
       throw Exception('Unexpected case');
     }
-    if (_right.content is ContentEmbed || _right.content is ContentString) {
-      if (!_right.deleted) {
-        this.index += _right.length;
-      }
-    } else if (_right.content is ContentFormat) {
-      if (!_right.deleted) {
-        updateCurrentAttributes(
-            this.currentAttributes, _right.content as ContentFormat);
-      }
+
+    switch(right.content) {
+      case ContentFormat content:
+        if (!right.deleted) {
+          updateCurrentAttributes(this.currentAttributes, content);
+        }
+      default:
+        if (!right.deleted) {
+          this.index += right.length;
+        }
     }
 
     this.left = this.right;
-    this.right = this.right!.right;
+    this.right = right.right;
   }
 }
 
@@ -115,28 +117,27 @@ class ItemTextListPosition {
  */
 ItemTextListPosition findNextPosition(
     Transaction transaction, ItemTextListPosition pos, int count) {
-  var _right = pos.right;
-  while (_right != null && count > 0) {
-    if (_right.content is ContentEmbed || _right.content is ContentString) {
-      if (!_right.deleted) {
-        if (count < _right.length) {
-          // split right
-          getItemCleanStart(
-              transaction, createID(_right.id.client, _right.id.clock + count));
+  var right = pos.right;
+  while (right != null && count > 0) {
+    switch(right.content) {
+      case ContentFormat content:
+        if (!right.deleted) {
+          updateCurrentAttributes(pos.currentAttributes,
+            /** @type {ContentFormat} */ content);
         }
-        pos.index += _right.length;
-        count -= _right.length;
-      }
-    } else if (_right.content is ContentFormat) {
-      if (!_right.deleted) {
-        updateCurrentAttributes(
-            pos.currentAttributes,
-            /** @type {ContentFormat} */ _right.content as ContentFormat);
-      }
+      default:
+        if (!right.deleted) {
+          if (count < right.length) {
+            // split right
+            getItemCleanStart(transaction, createID(right.id.client, right.id.clock + count));
+          }
+          pos.index += right.length;
+          count -= right.length;
+        }
     }
     pos.left = pos.right;
-    pos.right = _right.right;
-    _right = pos.right;
+    pos.right = right.right;
+    right = pos.right;
     // pos.forward() - we don't forward because that would halve the performance because we already do the checks above
   }
   return pos;
@@ -146,15 +147,16 @@ ItemTextListPosition findNextPosition(
  * @param {Transaction} transaction
  * @param {AbstractType<any>} parent
  * @param {number} index
+ * @param {boolean} useSearchMarker
  * @return {ItemTextListPosition}
  *
  * @private
  * @function
  */
 ItemTextListPosition findPosition(
-    Transaction transaction, AbstractType parent, int index) {
+    Transaction transaction, AbstractType parent, int index, bool useSearchMarker) {
   final currentAttributes = <String, Object?>{};
-  final marker = findMarker(parent, index);
+  final marker = useSearchMarker ? findMarker(parent, index): null;
   if (marker != null) {
     final pos = ItemTextListPosition(
         marker.p.left, marker.p, marker.index, currentAttributes);
@@ -184,28 +186,29 @@ void insertNegatedAttributes(
   Map<String, Object?> negatedAttributes,
 ) {
   // check if we really need to remove attributes
-  var _right = currPos.right;
-  final rContent = _right?.content;
+  var _right = currPos.right,
+    rContent = _right?.content;
   while (_right != null &&
-      (_right.deleted == true ||
+      (_right.deleted ||
           (rContent is ContentFormat &&
               (equalAttrs(
                   negatedAttributes.get(
                       /** @type {ContentFormat} */ rContent.key),
-                  /** @type {ContentFormat} */ rContent.value) 
-                  && negatedAttributes.containsKey(rContent.key))))) {
+                  /** @type {ContentFormat} */ rContent.value)
+              && negatedAttributes.containsKey(rContent.key))))) {
     if (!_right.deleted) {
       negatedAttributes.remove(
           /** @type {ContentFormat} */ (_right.content as ContentFormat).key);
     }
     currPos.forward();
     _right = currPos.right;
+    rContent = _right?.content;
   }
   final doc = transaction.doc;
   final ownClientId = doc.clientID;
-  var left = currPos.left;
-  final right = currPos.right;
   negatedAttributes.forEach((key, val) {
+    final left = currPos.left;
+    final right = currPos.right;
     final nextFormat = Item(
       createID(ownClientId, getState(doc.store, ownClientId)),
       left,
@@ -251,13 +254,13 @@ void minimizeAttributeChanges(
     ItemTextListPosition currPos, Map<String, dynamic> attributes) {
   // go right while attributes[right.key] == right.value (or right is deleted)
   while (true) {
-    final _right = currPos.right;
+    final _right = currPos.right,
+      rContent = _right?.content;
     if (_right == null) {
       break;
     } else if (_right.deleted ||
-        (_right.content is ContentFormat &&
-            equalAttrs(attributes[(_right.content as ContentFormat).key],
-                (_right.content as ContentFormat).value))) {
+        (rContent is ContentFormat &&
+            equalAttrs(attributes[rContent.key], rContent.value))) {
       //
     } else {
       break;
@@ -329,8 +332,8 @@ void _insertText(
 ) {
   currPos.currentAttributes.forEach((key, val) {
     if (!attributes.containsKey(key)) {
-      //attributes[key] = null;
-      attributes.remove(key);
+      attributes[key] = null;
+      // attributes.remove(key);
     }
   });
   final doc = transaction.doc;
@@ -339,16 +342,17 @@ void _insertText(
   final negatedAttributes =
       insertAttributes(transaction, parent, currPos, attributes);
   // insert content
-  final content = text is String
-      ? ContentString(/** @type {string} */ text)
-      : ContentEmbed(text as Map<String, dynamic>);
+  final content = switch(text) {
+    String text => ContentString(/** @type {string} */ text),
+    AbstractType _ => ContentType(text),
+    _ => ContentEmbed(text as Map<String, dynamic>)
+  };
   final index = currPos.index;
   var right = currPos.right;
   final left = currPos.left;
-  if (parent.innerSearchMarker != null &&
-      parent.innerSearchMarker!.isNotEmpty) {
-    updateMarkerChanges(
-        parent.innerSearchMarker!, currPos.index, content.getLength());
+  final searchMarker = parent.innerSearchMarker;
+  if (searchMarker != null && searchMarker.isNotEmpty) {
+    updateMarkerChanges(searchMarker, currPos.index, content.getLength());
   }
   right = Item(createID(ownClientId, getState(doc.store, ownClientId)), left,
       left?.lastId, right, right?.id, parent, null, content);
@@ -463,12 +467,10 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
   Item? start = _start,
     end = start;
   final endFormats = <String, dynamic>{};
-  while (end != null &&
-      end.content is! ContentString &&
-      end.content is! ContentEmbed) {
+  while (end != null && (!end.countable || end.deleted)) {
     if (!end.deleted && end.content is ContentFormat) {
-      final cf = end.content as ContentFormat;
-      endFormats[cf.key] = cf;
+      final cf = /** @type {ContentFormat} */ (end.content as ContentFormat);
+      endFormats.set(cf.key, cf);
     }
     end = end.right;
   }
@@ -482,12 +484,13 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
       final content = start.content;
       if (content is ContentFormat) {
         final key = content.key,
-          startAttrValue = startAttributes.get(content.key);
+          value = content.value,
+          startAttrValue = startAttributes.get(key);
         if (endFormats.get(key) != content || startAttrValue == content) {
           // Either this format is overwritten or it is not necessary because the attribute already existed.
           start.delete(transaction);
           cleanups++;
-          if (!reachedCurr && currAttributes.get(key) == content.value && startAttrValue != content.value) {
+          if (!reachedCurr && currAttributes.get(key) == value && startAttrValue != value) {
             if (startAttrValue == null) {
               currAttributes.remove(key);
             } else {
@@ -513,18 +516,15 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
  */
 void cleanupContextlessFormattingGap(Transaction transaction, Item? item) {
   // iterate until item.right is null or content
-  final _right = item?.right;
+  var _right = item?.right;
   while (_right != null &&
-      (_right.deleted ||
-          (_right.content is ContentString &&
-              _right.content is ContentEmbed))) {
+      (_right.deleted || !_right.countable)) {
     item = _right;
+    _right = item.right;
   }
   final attrs = <String>{};
   // iterate back until a content item is found
-  while (item != null &&
-      (item.deleted ||
-          (item.content is! ContentString && item.content is! ContentEmbed))) {
+  while (item != null && (item.deleted || !item.countable)) {
     if (!item.deleted && item.content is ContentFormat) {
       final key =
           /** @type {ContentFormat} */ (item.content as ContentFormat).key;
@@ -558,7 +558,7 @@ int cleanupYTextFormatting(YText type) {
     var startAttributes = <String, dynamic>{};
     final currentAttributes = {...startAttributes};
     while (end != null) {
-      if (end.deleted == false) {
+      if (!end.deleted) {
         if (end.content is ContentFormat) {
           updateCurrentAttributes(
               currentAttributes,
@@ -578,6 +578,63 @@ int cleanupYTextFormatting(YText type) {
 }
 
 /**
+ * This will be called by the transaction once the event handlers are called to potentially cleanup
+ * formatting attributes.
+ *
+ * @param {Transaction} transaction
+ */
+void cleanupYTextAfterTransaction(Transaction transaction) {
+  /**
+   * @type {Set<YText>}
+   */
+  final needFullCleanup = <YText>{};
+  // check if another formatting item was inserted
+  final doc = transaction.doc;
+  for (final en in transaction.afterState.entries) {
+    //client, afterClock
+    final client = en.key,
+      afterClock = en.value;
+    final clock = transaction.beforeState.get(client) ?? 0;
+    if (afterClock == clock) {
+      continue;
+    }
+    iterateStructs(transaction, /** @type {Array<Item|GC>} */ (doc.store.clients.get(client) as List<AbstractStruct>), 
+      clock, afterClock, (_item) {
+      final item = _item as Item;
+      if (
+        !item.deleted && /** @type {Item} */ (item).content is ContentFormat && item is! GC
+      ) {
+        needFullCleanup.add(/** @type {any} */ (item).parent as YText);
+      }
+    });
+  }
+  // cleanup in a new transaction
+  transact(doc, (t) {
+    iterateDeletedStructs(transaction, transaction.deleteSet, (_item) {
+      if (_item is GC || !(/** @type {YText} */ ((_item as YText).parent as YText).innerHasFormatting) 
+          || needFullCleanup.contains(/** @type {YText} */ ((_item as YText).parent))) {
+        return;
+      }
+      final item = _item as Item,
+        parent = /** @type {YText} */ (item.parent as YText);
+      if (item.content is ContentFormat) {
+        needFullCleanup.add(parent);
+      } else {
+        // If no formatting attribute was inserted or deleted, we can make due with contextless
+        // formatting cleanups.
+        // Contextless: it is not necessary to compute currentAttributes for the affected position.
+        cleanupContextlessFormattingGap(t, item);
+      }
+    });
+    // If a formatting item was inserted, we simply clean the whole type.
+    // We need to compute currentAttributes for the current position anyway.
+    for (final yText in needFullCleanup) {
+      cleanupYTextFormatting(yText);
+    }
+  });
+}
+
+/**
  * @param {Transaction} transaction
  * @param {ItemTextListPosition} currPos
  * @param {number} length
@@ -594,13 +651,17 @@ ItemTextListPosition deleteText(
   while (length > 0 && currPos.right != null) {
     final _right = currPos.right!;
     if (_right.deleted == false) {
-      if (_right.content is ContentEmbed || _right.content is ContentString) {
-        if (length < _right.length) {
-          getItemCleanStart(transaction,
-              createID(_right.id.client, _right.id.clock + length));
-        }
-        length -= _right.length;
-        _right.delete(transaction);
+      switch(_right.content) {
+        case ContentType _:
+        case ContentEmbed _:
+        case ContentString _:
+          if (length < _right.length) {
+            getItemCleanStart(transaction,
+                createID(_right.id.client, _right.id.clock + length));
+          }
+          length -= _right.length;
+          _right.delete(transaction);
+
       }
     }
     currPos.forward();
@@ -617,10 +678,9 @@ ItemTextListPosition deleteText(
   final parent = /** @type {AbstractType<any>} */
       /** @type {Item} */ (currPos.left ?? currPos.right)?.parent
           as AbstractType?;
-  if (parent?.innerSearchMarker != null &&
-      parent!.innerSearchMarker!.isNotEmpty) {
-    updateMarkerChanges(
-        parent.innerSearchMarker!, currPos.index, -startLength + length);
+  final searchMarker = parent?.innerSearchMarker;
+  if (searchMarker != null && searchMarker.isNotEmpty) {
+    updateMarkerChanges(searchMarker, currPos.index, -startLength + length);
   }
   return currPos;
 }
@@ -667,8 +727,53 @@ class YTextEvent extends YEvent {
   /**
    * @param {YText} ytext
    * @param {Transaction} transaction
+   * @param {Set<any>} subs The keys that changed
    */
-  YTextEvent(YText ytext, Transaction transaction) : super(ytext, transaction);
+  YTextEvent(super.ytext, super.transaction, Set subs) {
+    for (final sub in subs) {
+      if (sub == null) {
+        this.childListChanged = true;
+      } else {
+        this.keysChanged.add(sub);
+      }
+    }
+  }
+
+  /**
+   * Whether the children changed.
+   * @type {Boolean}
+   * @private
+   */
+  bool childListChanged = false;
+
+  /**
+   * Set of all changed attributes.
+   * @type {Set<string>}
+   */
+  final keysChanged = <String>{};
+
+  YChanges? _changes;
+
+  /**
+   * @type {{added:Set<Item>,deleted:Set<Item>,keys:Map<string,{action:'add'|'update'|'delete',oldValue:any}>,delta:Array<{insert?:Array<any>|string, delete?:number, retain?:number}>}}
+   */
+  @override
+  YChanges get changes {
+    var changes = this._changes;
+    if (changes == null) {
+      /**
+       * @type {{added:Set<Item>,deleted:Set<Item>,keys:Map<string,{action:'add'|'update'|'delete',oldValue:any}>,delta:Array<{insert?:Array<any>|string|AbstractType<any>|object, delete?:number, retain?:number}>}}
+       */
+      changes = YChanges(
+        keys: this.keys,
+        delta: this.delta,
+        added: {},
+        deleted: {},);
+      this._changes = changes;
+    }
+    return changes;
+  }
+
   /**
      * @type {List<DeltaItem>|null}
      */
@@ -682,12 +787,13 @@ class YTextEvent extends YEvent {
    *
    * @public
    */
+  @override
   List<DeltaItem> get delta {
-    if (this._delta == null) {
+    var delta = this._delta;
+    if (delta == null) {
       final y = /** @type {Doc} */ this.target.doc!;
-      this._delta = [];
+      this._delta = delta = [];
       transact(y, (transaction) {
-        final delta = /** @type {List<DeltaItem>} */ this._delta!;
         final currentAttributes =
             <String, dynamic>{}; // saves all current attributes for insert
         final oldAttributes = <String, dynamic>{};
@@ -712,153 +818,151 @@ class YTextEvent extends YEvent {
             /**
              * @type {any}
              */
-            DeltaItem op;
+            DeltaItem? op;
             switch (action) {
               case "delete":
-                op = DeltaItem.delete(deleteLen, attributes: null);
+              if (deleteLen > 0)
+                  op = DeltaItem.delete(deleteLen, attributes: null);
                 deleteLen = 0;
                 break;
               case "insert":
-                Map<String, dynamic>? _attr;
-                if (currentAttributes.length > 0) {
-                  _attr = {};
-                  currentAttributes.forEach((key, value) {
-                    if (value != null) {
-                      _attr![key] = value;
-                    }
-                  });
+                if (insert is Map || (insert is String && (insert as String).isNotEmpty)) {
+                  Map<String, dynamic>? _attr;
+                  if (currentAttributes.length > 0) {
+                    _attr = {};
+                    currentAttributes.forEach((key, value) {
+                      if (value != null) {
+                        _attr![key] = value;
+                      }
+                    });
+                  }
+                  op = DeltaItem.insert(insert, attributes: _attr);
                 }
-                op = DeltaItem.insert(insert, attributes: _attr);
-
-                insert = "";
+                insert = '';
                 break;
               case "retain":
-                op = DeltaItem.retain(retain,
-                    attributes: attributes.length > 0 ? {...attributes} : null);
+                if (retain > 0)
+                  op = DeltaItem.retain(retain,
+                      attributes: attributes.length > 0 ? {...attributes} : null);
                 retain = 0;
                 break;
               default:
                 throw Exception("Unexpected case");
             }
-            delta.add(op);
+            if (op != null)
+              delta!.add(op);
             action = null;
           }
         }
 
         while (item != null) {
-          if (item.content is ContentEmbed) {
-            if (this.adds(item)) {
-              if (!this.deletes(item)) {
-                addOp();
-                action = "insert";
-                insert =
-                    /** @type {ContentEmbed} */ (item.content as ContentEmbed)
-                        .embed;
-                addOp();
-              }
-            } else if (this.deletes(item)) {
-              if (action != "delete") {
-                addOp();
-                action = "delete";
-              }
-              deleteLen += 1;
-            } else if (!item.deleted) {
-              if (action != "retain") {
-                addOp();
-                action = "retain";
-              }
-              retain += 1;
-            }
-          } else if (item.content is ContentString) {
-            if (this.adds(item)) {
-              if (!this.deletes(item)) {
-                if (action != "insert") {
+          switch(item.content) {
+            case ContentType _:
+            case ContentEmbed _:
+              if (this.adds(item)) {
+                if (!this.deletes(item)) {
                   addOp();
-                  action = "insert";
+                  action = 'insert';
+                  insert = item.content.getContent()[0];
+                  addOp();
                 }
-                insert = (insert as String) +
-                    /** @type {ContentString} */ (item.content as ContentString)
-                        .str;
+              } else if (this.deletes(item)) {
+                if (action != 'delete') {
+                  addOp();
+                  action = 'delete';
+                }
+                deleteLen += 1;
+              } else if (!item.deleted) {
+                if (action != 'retain') {
+                  addOp();
+                  action = 'retain';
+                }
+                retain += 1;
               }
-            } else if (this.deletes(item)) {
-              if (action != "delete") {
-                addOp();
-                action = "delete";
+            case ContentString _:
+              if (this.adds(item)) {
+                if (!this.deletes(item)) {
+                  if (action != 'insert') {
+                    addOp();
+                    action = 'insert';
+                  }
+                  //insert += /** @type {ContentString} */ (item.content as ContentString).str;
+                  insert = '$insert${(item.content as ContentString).str}';
+                }
+              } else if (this.deletes(item)) {
+                if (action != 'delete') {
+                  addOp();
+                  action = 'delete';
+                }
+                deleteLen += item.length;
+              } else if (!item.deleted) {
+                if (action != 'retain') {
+                  addOp();
+                  action = 'retain';
+                }
+                retain += item.length;
               }
-              deleteLen += item.length;
-            } else if (!item.deleted) {
-              if (action != "retain") {
-                addOp();
-                action = "retain";
-              }
-              retain += item.length;
-            }
-          } else if (item.content is ContentFormat) {
-            final key =
-                /** @type {ContentFormat} */ (item.content as ContentFormat)
-                    .key;
-            final value =
-                /** @type {ContentFormat} */ (item.content as ContentFormat)
-                    .value;
-            if (this.adds(item)) {
-              if (!this.deletes(item)) {
-                final curVal = currentAttributes.get(key);
+
+            case ContentFormat _:
+              final content = item.content as ContentFormat,
+                key = content.key,
+                value = content.value;
+              if (this.adds(item)) {
+                if (!this.deletes(item)) {
+                  final curVal = currentAttributes.get(key) ?? null;
+                  if (!equalAttrs(curVal, value)) {
+                    if (action == 'retain') {
+                      addOp();
+                    }
+                    if (equalAttrs(value, (oldAttributes.get(key) ?? null))) {
+                      attributes.remove(key);
+                    } else {
+                      attributes[key] = value;
+                    }
+                  } else if (value != null) {
+                    item.delete(transaction);
+                  }
+                }
+              } else if (this.deletes(item)) {
+                oldAttributes.set(key, value);
+                final curVal = currentAttributes.get(key) ?? null;
                 if (!equalAttrs(curVal, value)) {
-                  if (action == "retain") {
+                  if (action == 'retain') {
                     addOp();
                   }
-                  if (equalAttrs(value, oldAttributes.get(key))) {
-                    attributes.remove(key);
-                  } else {
-                    attributes[key] = value;
+                  attributes[key] = curVal;
+                }
+              } else if (!item.deleted) {
+                oldAttributes.set(key, value);
+                final attr = attributes[key];
+                if (attributes.containsKey(key)) {
+                  if (!equalAttrs(attr, value)) {
+                    if (action == 'retain') {
+                      addOp();
+                    }
+                    if (value == null) {
+                      attributes.remove(key);
+                    } else {
+                      attributes[key] = value;
+                    }
+                  } else if (attr != null) { // this will be cleaned up automatically by the contextless cleanup function
+                    item.delete(transaction);
                   }
-                } else {
-                  item.delete(transaction);
                 }
               }
-            } else if (this.deletes(item)) {
-              oldAttributes.set(key, value);
-              final curVal = currentAttributes.get(key);
-              if (!equalAttrs(curVal, value)) {
-                if (action == "retain") {
+              if (!item.deleted) {
+                if (action == 'insert') {
                   addOp();
                 }
-                attributes[key] = curVal;
+                updateCurrentAttributes(currentAttributes, /** @type {ContentFormat} */ (item.content as ContentFormat));
               }
-            } else if (!item.deleted) {
-              oldAttributes.set(key, value);
-              final attr = attributes[key];
-              if (attributes.containsKey(key)) {
-                if (!equalAttrs(attr, value)) {
-                  if (action == "retain") {
-                    addOp();
-                  }
-                  if (value == null) {
-                    attributes[key] = value;
-                  } else {
-                    attributes.remove(key);
-                  }
-                } else {
-                  item.delete(transaction);
-                }
-              }
-            }
-            if (!item.deleted) {
-              if (action == "insert") {
-                addOp();
-              }
-              updateCurrentAttributes(
-                  currentAttributes,
-                  /** @type {ContentFormat} */ item.content as ContentFormat);
-            }
           }
           item = item.right;
         }
         addOp();
-        while (delta.length > 0) {
+        while (delta!.isNotEmpty) {
           final lastOp = delta[delta.length - 1];
-          if (lastOp.maybeMap(retain: (_) => true, orElse: () => false)! &&
-              lastOp.attributes == null) {
+          if (lastOp.isRetain && lastOp.attributes == null) {
             // retain delta's if they don't assign attributes
             delta.removeLast();
           } else {
@@ -867,7 +971,7 @@ class YTextEvent extends YEvent {
         }
       });
     }
-    return this._delta!;
+    return delta;
   }
 }
 
@@ -881,7 +985,6 @@ class YTextEvent extends YEvent {
  * @extends AbstractType<YTextEvent>
  */
 class YText extends AbstractType<YTextEvent> {
-  static YText create() => YText();
   /**
    * @param {String} [string] The initial value of the YText.
    */
@@ -899,6 +1002,12 @@ class YText extends AbstractType<YTextEvent> {
   final List<ArraySearchMarker> innerSearchMarker = [];
 
   List<void Function()>? _pending;
+
+  /**
+   * Whether this YText contains formatting attributes.
+   * This flag is updated when a formatting item is integrated (see ContentFormat.integrate)
+   */
+  bool innerHasFormatting = false;
 
   /**
    * Number of characters of this text type.
@@ -948,66 +1057,12 @@ class YText extends AbstractType<YTextEvent> {
   @override
   void innerCallObserver(Transaction transaction, Set<String?> parentSubs) {
     super.innerCallObserver(transaction, parentSubs);
-    final event = YTextEvent(this, transaction);
-    final doc = transaction.doc;
+    final event = YTextEvent(this, transaction, parentSubs);
+    callTypeObservers(this, transaction, event);
     // If a remote change happened, we try to cleanup potential formatting duplicates.
-    if (!transaction.local) {
-      // check if another formatting item was inserted
-      var foundFormattingItem = false;
-      for (final entry in transaction.afterState.entries) {
-        final client = entry.key;
-        final afterClock = entry.value;
-        final clock = transaction.beforeState.get(client) ?? 0;
-        if (afterClock == clock) {
-          continue;
-        }
-        iterateStructs(
-            transaction,
-            /** @type {List<Item|GC>} */ doc.store.clients.get(client)!,
-            clock,
-            afterClock, (item) {
-          if (!item.deleted &&
-              /** @type {Item} */ (item as Item).content is ContentFormat) {
-            foundFormattingItem = true;
-          }
-        });
-        if (foundFormattingItem) {
-          break;
-        }
-      }
-      if (!foundFormattingItem) {
-        iterateDeletedStructs(transaction, transaction.deleteSet, (item) {
-          if (item is GC || foundFormattingItem) {
-            return;
-          }
-          if (item is Item &&
-              item.parent == this &&
-              item.content is ContentFormat) {
-            foundFormattingItem = true;
-          }
-        });
-      }
-      transact(doc, (t) {
-        if (foundFormattingItem) {
-          // If a formatting item was inserted, we simply clean the whole type.
-          // We need to compute currentAttributes for the current position anyway.
-          cleanupYTextFormatting(this);
-        } else {
-          // If no formatting attribute was inserted, we can make due with contextless
-          // formatting cleanups.
-          // Contextless: it is not necessary to compute currentAttributes for the affected position.
-          iterateDeletedStructs(t, t.deleteSet, (item) {
-            if (item is GC) {
-              return;
-            }
-            if (item is Item && item.parent == this) {
-              cleanupContextlessFormattingGap(t, item);
-            }
-          });
-        }
-      });
+    if (!transaction.local && this.innerHasFormatting) {
+      transaction.innerNeedFormattingCleanup = true;
     }
-    callTypeObservers<YTextEvent>(this, transaction, event);
   }
 
   /**
@@ -1065,12 +1120,9 @@ class YText extends AbstractType<YTextEvent> {
             // If we omit this step, clients will see a different number of
             // paragraphs, but nothing bad will happen.
             final _insert = op["insert"];
-            final ins = !sanitize &&
-                    i == delta.length - 1 &&
-                    currPos.right == null &&
-                    _insert is String &&
-                    _insert[_insert.length - 1] == "\n"
-                ? _insert.substring(0, _insert.length - 1)
+            final ins = (!sanitize && _insert is String && i == delta.length - 1 
+              && currPos.right == null && _insert[_insert.length - 1] == "\n") ? 
+                _insert.substring(0, _insert.length - 1)
                 : _insert;
             if (ins is! String || ins.length > 0) {
               _insertText(
@@ -1148,80 +1200,91 @@ class YText extends AbstractType<YTextEvent> {
       }
     }
 
-    // snapshots are merged again after the transaction, so we need to keep the
-    // transalive until we are done
-    transact(doc!, (transaction) {
-      if (snapshot != null) {
-        splitSnapshotAffectedStructs(transaction, snapshot);
-      }
-      if (prevSnapshot != null) {
-        splitSnapshotAffectedStructs(transaction, prevSnapshot);
-      }
+    void computeDelta() {
       while (n != null) {
         final _n = n!;
         if (isVisible(_n, snapshot) ||
             (prevSnapshot != null && isVisible(_n, prevSnapshot))) {
-          if (_n.content is ContentString) {
-            final cur =
+          switch(_n.content) {
+            case ContentString content:
+              final cur =
                 currentAttributes.get("ychange") as Map<String, Object?>?;
-            if (snapshot != null && !isVisible(_n, snapshot)) {
-              if (cur == null ||
-                  cur["user"] != _n.id.client ||
-                  cur["state"] != "removed") {
+              if (snapshot != null && !isVisible(_n, snapshot)) {
+                if (cur == null ||
+                    cur["user"] != _n.id.client ||
+                    cur["type"] != "removed") {
+                  packStr();
+                  currentAttributes.set(
+                      "ychange",
+                      computeYChange != null
+                          ? computeYChange("removed", _n.id)
+                          : {"type": "removed"});
+                }
+              } else if (prevSnapshot != null && !isVisible(_n, prevSnapshot)) {
+                if (cur == null ||
+                    cur["user"] != _n.id.client ||
+                    cur["type"] != "added") {
+                  packStr();
+                  currentAttributes.set(
+                      "ychange",
+                      computeYChange != null
+                          ? computeYChange("added", _n.id)
+                          : {"type": "added"});
+                }
+              } else if (cur != null) {
                 packStr();
-                currentAttributes.set(
-                    "ychange",
-                    computeYChange != null
-                        ? computeYChange("removed", _n.id)
-                        : {"type": "removed"});
+                currentAttributes.remove("ychange");
               }
-            } else if (prevSnapshot != null && !isVisible(_n, prevSnapshot)) {
-              if (cur == null ||
-                  cur["user"] != _n.id.client ||
-                  cur["state"] != "added") {
+              str +=
+                  /** @type {ContentString} */ content.str;
+
+            case ContentType _:
+            case ContentEmbed _:
+              packStr();
+              /**
+                   * @type {Object<string,any>}
+                   */
+              final op = <String, Object?>{
+                "insert": /** @type {ContentEmbed} */ _n.content.getContent()[0],
+              };
+              if (currentAttributes.length > 0) {
+                final attrs = /** @type {Object<string,any>} */ {};
+                op["attributes"] = attrs;
+                currentAttributes.forEach((key, value) {
+                  attrs[key] = value;
+                });
+              }
+              ops.add(op);
+
+            case ContentFormat content:
+              if (isVisible(_n, snapshot)) {
                 packStr();
-                currentAttributes.set(
-                    "ychange",
-                    computeYChange != null
-                        ? computeYChange("added", _n.id)
-                        : {"type": "added"});
+                updateCurrentAttributes(
+                    currentAttributes, content);
               }
-            } else if (cur != null) {
-              packStr();
-              currentAttributes.remove("ychange");
-            }
-            str +=
-                /** @type {ContentString} */ (_n.content as ContentString).str;
-          } else if (_n.content is ContentEmbed) {
-            packStr();
-            /**
-                 * @type {Object<string,any>}
-                 */
-            final op = <String, Object?>{
-              "insert": /** @type {ContentEmbed} */ (_n.content as ContentEmbed)
-                  .embed,
-            };
-            if (currentAttributes.length > 0) {
-              final attrs = /** @type {Object<string,any>} */ {};
-              op["attributes"] = attrs;
-              currentAttributes.forEach((key, value) {
-                attrs[key] = value;
-              });
-            }
-            ops.add(op);
-          } else if (_n.content is ContentFormat) {
-            if (isVisible(_n, snapshot)) {
-              packStr();
-              updateCurrentAttributes(
-                  currentAttributes,
-                  /** @type {ContentFormat} */ _n.content as ContentFormat);
-            }
+
           }
         }
         n = _n.right;
       }
       packStr();
-    }, splitSnapshotAffectedStructs);
+    }
+
+    if (snapshot != null || prevSnapshot != null) {
+      // snapshots are merged again after the transaction, so we need to keep the
+      // transaction alive until we are done
+      transact(doc!, (transaction) {
+        if (snapshot != null) {
+          splitSnapshotAffectedStructs(transaction, snapshot);
+        }
+        if (prevSnapshot != null) {
+          splitSnapshotAffectedStructs(transaction, prevSnapshot);
+        }
+        computeDelta();
+      }, 'cleanup');
+    } else {
+      computeDelta();
+    }
     return ops;
   }
 
@@ -1246,7 +1309,7 @@ class YText extends AbstractType<YTextEvent> {
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
-        final pos = findPosition(transaction, this, index);
+        final pos = findPosition(transaction, this, index, _attributes == null);
         final Map<String, Object?> attributes;
         if (_attributes == null) {
           attributes = {};
@@ -1283,16 +1346,15 @@ class YText extends AbstractType<YTextEvent> {
     // if (embed.constructor != Object) {
     //   throw  Exception("Embed must be an Object");
     // }
-    attributes = attributes == null ? {} : {...attributes};
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
-        final pos = findPosition(transaction, this, index);
-        _insertText(transaction, this, pos, embed, attributes!);
+        final pos = findPosition(transaction, this, index, attributes == null);
+        _insertText(transaction, this, pos, embed, attributes ?? {});
       });
     } else {
       /** @type {List<function>} */ (this._pending!)
-          .add(() => this.insertEmbed(index, embed, attributes));
+          .add(() => this.insertEmbed(index, embed, attributes ?? {}));
     }
   }
 
@@ -1311,7 +1373,7 @@ class YText extends AbstractType<YTextEvent> {
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
-        deleteText(transaction, findPosition(transaction, this, index), length);
+        deleteText(transaction, findPosition(transaction, this, index, true), length);
       });
     } else {
       /** @type {List<function>} */ (this._pending!)
@@ -1336,7 +1398,7 @@ class YText extends AbstractType<YTextEvent> {
     final y = this.doc;
     if (y != null) {
       transact(y, (transaction) {
-        final pos = findPosition(transaction, this, index);
+        final pos = findPosition(transaction, this, index, false);
         if (pos.right == null) {
           return;
         }
@@ -1365,176 +1427,3 @@ class YText extends AbstractType<YTextEvent> {
  * @function
  */
 YText readYText(AbstractUpdateDecoder decoder) => YText();
-
-abstract class DeltaItem {
-  DeltaItem._();
-
-  static DeltaItem? fromMap(Map<String, Object?> map) {
-    final _attr = (map["attributes"] as Map?)?.cast<String, dynamic>();
-
-    if (map["retain"] is int) {
-      DeltaItem.retain(map["retain"] as int, attributes: _attr);
-    } else if (map["delete"] is int) {
-      DeltaItem.delete(map["delete"] as int, attributes: _attr);
-    } else if (map["insert"] is String || map["insert"] is Map) {
-      DeltaItem.insert(map["insert"] as Object, attributes: _attr);
-    } else {
-      return null;
-    }
-  }
-
-  Map<String, Object?> toMap() {
-    return {
-      "attributes": this.attributes,
-      ...this.when<Map<String, Object?>>(
-        delete: (d, _) => {"delete": d},
-        retain: (d, _) => {"retain": d},
-        insert: (d, _) => {"insert": d},
-      )
-    };
-  }
-
-  @override
-  int get hashCode =>
-      this.attributes.hashCode ^
-      this
-          .when<Object>(
-            delete: (d, _) => d,
-            retain: (d, _) => d,
-            insert: (d, _) => d,
-          )
-          .hashCode;
-
-  @override
-  bool operator ==(Object other) {
-    if (other is DeltaItem) {
-      if (!mapsAreEqual(this.attributes, other.attributes)) {
-        return false;
-      }
-      return this.when(
-        delete: (d1, _) =>
-            other.maybeWhen(delete: (d2, _) => d2 == d1) ?? false,
-        retain: (d1, _) =>
-            other.maybeWhen(retain: (d2, _) => d2 == d1) ?? false,
-        insert: (d1, _) =>
-            other.maybeWhen(insert: (d2, _) {
-              if (d1 is Map && d2 is Map) {
-                return mapsAreEqual(d1, d2);
-              } else {
-                return d2 == d1;
-              }
-            }) ??
-            false,
-      );
-    }
-    return false;
-  }
-
-  Map<String, dynamic>? get attributes => this.map(
-        delete: (e) => e.attributes,
-        retain: (e) => e.attributes,
-        insert: (e) => e.attributes,
-      );
-
-  factory DeltaItem.delete(
-    int delete, {
-    required Map<String, dynamic>? attributes,
-  }) = _Delete;
-  factory DeltaItem.retain(
-    int retain, {
-    required Map<String, dynamic>? attributes,
-  }) = _Retain;
-  factory DeltaItem.insert(
-    Object insert, {
-    required Map<String, dynamic>? attributes,
-  }) = _Insert;
-
-  T when<T>({
-    required T Function(int delete, Map<String, dynamic>? attributes) delete,
-    required T Function(int retain, Map<String, dynamic>? attributes) retain,
-    required T Function(Object insert, Map<String, dynamic>? attributes) insert,
-  }) {
-    final v = this;
-    if (v is _Delete) return delete(v.delete, v.attributes);
-    if (v is _Retain) return retain(v.retain, v.attributes);
-    if (v is _Insert) return insert(v.insert, v.attributes);
-    throw "";
-  }
-
-  T? maybeWhen<T>({
-    T Function()? orElse,
-    T Function(int delete, Map<String, dynamic>? attributes)? delete,
-    T Function(int retain, Map<String, dynamic>? attributes)? retain,
-    T Function(Object insert, Map<String, dynamic>? attributes)? insert,
-  }) {
-    final v = this;
-    if (v is _Delete) {
-      return delete != null ? delete(v.delete, v.attributes) : orElse?.call();
-    }
-    if (v is _Retain) {
-      return retain != null ? retain(v.retain, v.attributes) : orElse?.call();
-    }
-    if (v is _Insert) {
-      return insert != null ? insert(v.insert, v.attributes) : orElse?.call();
-    }
-    throw "";
-  }
-
-  T map<T>({
-    required T Function(_Delete value) delete,
-    required T Function(_Retain value) retain,
-    required T Function(_Insert value) insert,
-  }) {
-    final v = this;
-    if (v is _Delete) return delete(v);
-    if (v is _Retain) return retain(v);
-    if (v is _Insert) return insert(v);
-    throw "";
-  }
-
-  T? maybeMap<T>({
-    T Function()? orElse,
-    T Function(_Delete value)? delete,
-    T Function(_Retain value)? retain,
-    T Function(_Insert value)? insert,
-  }) {
-    final v = this;
-    if (v is _Delete) return delete != null ? delete(v) : orElse?.call();
-    if (v is _Retain) return retain != null ? retain(v) : orElse?.call();
-    if (v is _Insert) return insert != null ? insert(v) : orElse?.call();
-    throw "";
-  }
-}
-
-class _Delete extends DeltaItem {
-  final int delete;
-  @override
-  final Map<String, dynamic>? attributes;
-
-  _Delete(
-    this.delete, {
-    required this.attributes,
-  }) : super._();
-}
-
-class _Retain extends DeltaItem {
-  final int retain;
-  @override
-  final Map<String, dynamic>? attributes;
-
-  _Retain(
-    this.retain, {
-    required this.attributes,
-  }) : super._();
-}
-
-class _Insert extends DeltaItem {
-  final Object insert;
-  @override
-  final Map<String, dynamic>? attributes;
-
-  _Insert(
-    this.insert, {
-    required this.attributes,
-  }) : super._();
-}

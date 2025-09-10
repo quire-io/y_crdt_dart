@@ -59,7 +59,7 @@ class RelativePosition {
    * @param {string|null} tname
    * @param {ID|null} item
    */
-  RelativePosition(this.type, this.tname, this.item);
+  RelativePosition(this.type, this.tname, this.item, [this.assoc = 0]);
   /**
      * @type {ID|null}
      */
@@ -72,6 +72,40 @@ class RelativePosition {
      * @type {ID | null}
      */
   ID? item;
+
+  /**
+   * A relative position is associated to a specific character. By default
+   * assoc >= 0, the relative position is associated to the character
+   * after the meant position.
+   * I.e. position 1 in 'ab' is associated to character 'b'.
+   *
+   * If assoc < 0, then the relative position is associated to the character
+   * before the meant position.
+   *
+   * @type {number}
+   */
+  int assoc;
+}
+
+/**
+ * @param {RelativePosition} rpos
+ * @return {any}
+ */
+Map<String, Object?> relativePositionToJSON(RelativePosition rpos) {
+  final json = <String, Object?>{};
+  if (rpos.type case ID id) {
+    json['type'] = {'client': id.client, 'clock': id.clock};
+  }
+  if (rpos.tname case String tname) {
+    json['tname'] = tname;
+  }
+  if (rpos.item case ID id) {
+    json['innerItem'] = {'client': id.client, 'clock': id.clock};
+  }
+  if (rpos.assoc != 0) {
+    json['assoc'] = rpos.assoc;
+  }
+  return json;
 }
 
 /**
@@ -98,6 +132,7 @@ RelativePosition createRelativePositionFromJSON(Map<String, Object?> json) {
             innerItem["client"] as int,
             innerItem["clock"] as int,
           ),
+    json['assoc'] as int? ?? 0
   );
 }
 
@@ -106,7 +141,7 @@ class AbsolutePosition {
    * @param {AbstractType<any>} type
    * @param {number} index
    */
-  AbsolutePosition(this.type, this.index);
+  AbsolutePosition(this.type, this.index, [this.assoc = 0]);
   /**
      * @type {AbstractType<any>}
      */
@@ -115,6 +150,8 @@ class AbsolutePosition {
      * @type {number}
      */
   final int index;
+
+  final int assoc;
 }
 
 /**
@@ -123,8 +160,8 @@ class AbsolutePosition {
  *
  * @function
  */
-AbsolutePosition createAbsolutePosition(AbstractType type, int index) =>
-    AbsolutePosition(type, index);
+AbsolutePosition createAbsolutePosition(AbstractType type, int index, [int assoc = 0]) =>
+    AbsolutePosition(type, index, assoc);
 
 /**
  * @param {AbstractType<any>} type
@@ -132,7 +169,7 @@ AbsolutePosition createAbsolutePosition(AbstractType type, int index) =>
  *
  * @function
  */
-RelativePosition createRelativePosition(AbstractType type, ID? item) {
+RelativePosition createRelativePosition(AbstractType type, ID? item, [int assoc = 0]) {
   ID? typeid;
   String? tname;
   final typeItem = type.innerItem;
@@ -141,7 +178,7 @@ RelativePosition createRelativePosition(AbstractType type, ID? item) {
   } else {
     typeid = createID(typeItem.id.client, typeItem.id.clock);
   }
-  return RelativePosition(typeid, tname, item);
+  return RelativePosition(typeid, tname, item, assoc);
 }
 
 /**
@@ -154,20 +191,31 @@ RelativePosition createRelativePosition(AbstractType type, ID? item) {
  * @function
  */
 RelativePosition createRelativePositionFromTypeIndex(
-    AbstractType type, int index) {
+    AbstractType type, int index, [int assoc = 0]) {
   Item? t = type.innerStart;
+  if (assoc < 0) {
+    // associated to the left character or the beginning of a type, increment index if possible.
+    if (index == 0) {
+      return createRelativePosition(type, null, assoc);
+    }
+    index--;
+  }
   while (t != null) {
     if (!t.deleted && t.countable) {
       if (t.length > index) {
         // case 1: found position somewhere in the linked list
         return createRelativePosition(
-            type, createID(t.id.client, t.id.clock + index));
+            type, createID(t.id.client, t.id.clock + index), assoc);
       }
       index -= t.length;
     }
+    if (t.right == null && assoc < 0) {
+      // left-associated position, return last available id
+      return createRelativePosition(type, t.lastId, assoc);
+    }
     t = t.right;
   }
-  return createRelativePosition(type, null);
+  return createRelativePosition(type, null, assoc);
 }
 
 /**
@@ -181,6 +229,7 @@ encoding.Encoder writeRelativePosition(
   final type = rpos.type;
   final tname = rpos.tname;
   final item = rpos.item;
+  final assoc = rpos.assoc;
   if (item != null) {
     encoding.writeVarUint(encoder, 0);
     writeID(encoder, item);
@@ -195,6 +244,7 @@ encoding.Encoder writeRelativePosition(
   } else {
     throw Exception('Unexpected case');
   }
+  encoding.writeVarInt(encoder, assoc);
   return encoder;
 }
 
@@ -231,7 +281,8 @@ RelativePosition readRelativePosition(decoding.Decoder decoder) {
       // case 3: found position at the end of the list and type is attached to an item
       type = readID(decoder);
   }
-  return RelativePosition(type, tname, itemID);
+  final assoc = decoding.hasContent(decoder) ? decoding.readVarInt(decoder) : 0;
+  return RelativePosition(type, tname, itemID, assoc);
 }
 
 /**
@@ -242,29 +293,44 @@ RelativePosition decodeRelativePosition(Uint8List uint8Array) =>
     readRelativePosition(decoding.createDecoder(uint8Array));
 
 /**
+ * @param {StructStore} store
+ * @param {ID} id
+ */
+(AbstractType<T>, int) getItemWithOffset<T>(StructStore store, ID id) {
+  final item = getItem(store, id);
+  final diff = id.clock - item.id.clock;
+  return (item as AbstractType<T>, diff);
+}
+
+/**
  * @param {RelativePosition} rpos
  * @param {Doc} doc
+ * @param {boolean} followUndoneDeletions - whether to follow undone deletions - see https://github.com/yjs/yjs/issues/638
  * @return {AbsolutePosition|null}
  *
  * @function
  */
 AbsolutePosition? createAbsolutePositionFromRelativePosition(
-    RelativePosition rpos, Doc doc) {
+    RelativePosition rpos, Doc doc, [bool followUndoneDeletions = true]) {
   final store = doc.store;
   final rightID = rpos.item;
   final typeID = rpos.type;
   final tname = rpos.tname;
+  final assoc = rpos.assoc;
   AbstractType type;
   var index = 0;
   if (rightID != null) {
     if (getState(store, rightID.client) <= rightID.clock) {
       return null;
     }
-    final res = followRedone(store, rightID);
-    final right = res.item;
+    final res = followUndoneDeletions ? followRedone(store, rightID) : getItemWithOffset(store, rightID);
+    final right = res.$1;
+    if (right is! Item) {
+      return null;
+    }
     type = /** @type {AbstractType<any>} */ right.parent as AbstractType;
     if (type.innerItem == null || !type.innerItem!.deleted) {
-      index = right.deleted || !right.countable ? 0 : res.diff;
+      index = right.deleted || !right.countable ? 0 : (res.$2 + (assoc >= 0 ? 0 : 1)); // adjust position based on left association if necessary;
       var n = right.left;
       while (n != null) {
         if (!n.deleted && n.countable) {
@@ -281,8 +347,8 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
         // type does not exist yet
         return null;
       }
-      final item = followRedone(store, typeID).item;
-      if (item.content is ContentType) {
+      final item = followUndoneDeletions ? followRedone(store, typeID).$1 : getItem(store, typeID);
+      if (item is Item && item.content is ContentType) {
         type = (item.content as ContentType).type;
       } else {
         // struct is garbage collected
@@ -291,9 +357,13 @@ AbsolutePosition? createAbsolutePositionFromRelativePosition(
     } else {
       throw Exception('Unexpected case');
     }
-    index = type.innerLength;
+    if (assoc >= 0) {
+      index = type.innerLength;
+    } else {
+      index = 0;
+    }
   }
-  return createAbsolutePosition(type, index);
+  return createAbsolutePosition(type, index, rpos.assoc);
 }
 
 /**
@@ -308,4 +378,4 @@ bool compareRelativePositions(RelativePosition? a, RelativePosition? b) =>
         b != null &&
         a.tname == b.tname &&
         compareIDs(a.item, b.item) &&
-        compareIDs(a.type, b.type));
+        compareIDs(a.type, b.type)) && a.assoc == b.assoc;

@@ -18,7 +18,7 @@ class ContentBinary implements AbstractContent {
    * @param {Uint8Array} content
    */
   ContentBinary(this.content);
-  final Uint8List content;
+  Uint8List content;
 
   /**
    * @return {number}

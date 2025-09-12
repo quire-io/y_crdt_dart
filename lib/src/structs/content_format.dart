@@ -113,6 +113,11 @@ class ContentFormat implements AbstractContent {
   getRef() {
     return 6;
   }
+
+  @override
+  String toString() {
+    return 'ContentFormat(key: $key, value: $value)';
+  }
 }
 
 /**

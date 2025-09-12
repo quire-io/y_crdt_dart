@@ -15,6 +15,7 @@
 //   ID, // eslint-disable-line
 // } from "../internals.js";
 import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:y_crdt/src/lib0/decoding.dart' as decoding;
 import 'package:y_crdt/src/lib0/encoding.dart' as encoding;
@@ -47,6 +48,11 @@ class DeleteItem {
      * @type {number}
      */
   int len;
+
+  @override
+  String toString() {
+    return 'DeleteItem(clock: $clock, len: $len)';
+  }
 }
 
 /**
@@ -78,15 +84,12 @@ void iterateDeletedStructs(Transaction transaction, DeleteSet ds,
     ds.clients.forEach((clientid, deletes) {
       final structs = /** @type {List<GC|Item>} */ transaction.doc.store.clients
           .get(clientid);
-      for (var i = 0; i < deletes.length; i++) {
-        final del = deletes[i];
-        iterateStructs(transaction, structs!, del.clock, del.len, f);
-      }
-
       if (structs != null) {
         final lastStruct = structs[structs.length - 1],
           clockState = lastStruct.id.clock + lastStruct.length;
-        for (var i = 0, del = deletes[i]; i < deletes.length && del.clock < clockState; del = deletes[++i]) {
+        var i = 0;
+        DeleteItem? del = atX(deletes, i);
+        for (; i < deletes.length && del!.clock < clockState; del = atX(deletes, ++i)) {
           iterateStructs(transaction, structs, del.clock, del.len, f);
         }
       }
@@ -150,7 +153,7 @@ void sortAndMergeDeleteSet(DeleteSet ds) {
       final left = dels[j - 1];
       final right = dels[i];
       if (left.clock + left.len == right.clock) {
-        left.len += right.len;
+        left.len = math.max(left.len, right.clock + right.len - left.clock);
       } else {
         if (j < i) {
           dels[j] = right;
@@ -250,7 +253,7 @@ DeleteSet createDeleteSetFromStructStore(StructStore ss) {
 void writeDeleteSet(AbstractDSEncoder encoder, DeleteSet ds) {
   encoding.writeVarUint(encoder.restEncoder, ds.clients.length);
   final list = ds.clients.entries.toList();
-  list.sort((a, b) => a.key - b.key);
+  list.sort((a, b) => b.key - a.key);
 
   for (final en in list) {
     final client = en.key;
@@ -359,7 +362,7 @@ Uint8List? readAndApplyDeleteSet(
     }
   }
   if (unappliedDS.clients.length > 0) {
-    final ds = DSEncoderV2();
+    final ds = UpdateEncoderV2();
     encoding.writeVarUint(ds.restEncoder, 0); // encode 0 structs
     writeDeleteSet(ds, unappliedDS);
     return ds.toUint8Array();
@@ -377,9 +380,10 @@ bool equalDeleteSets(DeleteSet ds1, DeleteSet ds2) {
   for (final en in ds1.clients.entries) {
     final client = en.key, 
       deleteItems1 = en.value,
-      deleteItems2 = ds2.clients[client];
+      deleteItems2 = ds2.clients.get(client);
 
-    if (deleteItems2 == null || deleteItems1.length != deleteItems2.length) return false;
+    if (!ds2.clients.containsKey(client) 
+      || deleteItems1.length != deleteItems2!.length) return false;
     for (var i = 0; i < deleteItems1.length; i++) {
       final di1 = deleteItems1[i],
         di2 = deleteItems2[i];

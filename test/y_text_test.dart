@@ -1,7 +1,10 @@
 library;
 
+import 'dart:math' as math;
+
 import "package:test/test.dart";
 import "package:y_crdt/src/lib0/testing.dart" as t;
+import "package:y_crdt/src/lib0/prng.dart" as prng;
 import "package:y_crdt/src/types/y_text.dart";
 
 import 'package:y_crdt/y_crdt.dart' as y;
@@ -53,6 +56,46 @@ void main() {
 
     test('types as embed', () {
       testTypesAsEmbed(t.TestCase('y_text', 'types as embed'));
+    });
+
+    test('snapshot', () {
+      testSnapshot(t.TestCase('y_text', 'snapshot'));
+    });
+
+    test('snapshot delete after', () {
+      testSnapshotDeleteAfter(t.TestCase('y_text', 'snapshot delete after'));
+    });
+
+    test('toJSON', () {
+      testToJson(t.TestCase('y_text', 'toJSON'));
+    });
+
+    test('to delta embed attributes', () {
+      testToDeltaEmbedAttributes(t.TestCase('y_text', 'to delta embed attributes'));
+    });
+
+    test('to delta embed no attributes', () {
+      testToDeltaEmbedNoAttributes(t.TestCase('y_text', 'to delta embed no attributes'));
+    });
+
+    test('formatting removed', () {
+      testFormattingRemoved(t.TestCase('y_text', 'formatting removed'));
+    });
+
+    test('formatting removed in mid text', () {
+      testFormattingRemovedInMidText(t.TestCase('y_text', 'formatting removed in mid text'));
+    });
+
+    test('formatting delta unnecessary attribute change', () {
+      testFormattingDeltaUnnecessaryAttributeChange(t.TestCase('y_text', 'formatting delta unnecessary attribute change'));
+    });
+
+    test('insert and delete at random positions', () {
+      testInsertAndDeleteAtRandomPositions(t.TestCase('y_text', 'insert and delete at random positions'));
+    });
+
+    test('append chars', () {
+      testAppendChars(t.TestCase('y_text', 'append chars'));
     });
   });
 }
@@ -1931,7 +1974,7 @@ void testDeltaAfterConcurrentFormatting(t.TestCase tc) {
   final deltas = [];
   text1.observe((event, _) {
     if (event.delta.length > 0) {
-      deltas.add(event.delta.map((item) => item.toJson()).toList());
+      deltas.add(t.deltaToArray(event.delta));
     }
   });
   testConnector.flushAllMessages();
@@ -1950,7 +1993,7 @@ void testBasicInsertAndDelete(t.TestCase tc) {
   var delta;
 
   text0.observe((event, _) {
-    delta = event.delta.map((item) => item.toJson()).toList();
+    delta = t.deltaToArray(event.delta);
   });
 
   text0.delete(0, 0);
@@ -1986,7 +2029,7 @@ void testBasicFormat(t.TestCase tc) {
     text0 = results['text0'] as YText;
   var delta;
   text0.observe((event, _) {
-    delta = event.delta.map((op) => op.toJson()).toList();
+    delta = t.deltaToArray(event.delta);
   });
   text0.insert(0, 'abc', { 'bold': true });
   expect(text0.toString(), 'abc', reason: 'Basic insert with attributes works');
@@ -2027,17 +2070,17 @@ void testFalsyFormats(t.TestCase tc) {
     text0 = results['text0'] as YText;
   var delta;
   text0.observe((event, _) {
-    delta = event.delta.map((op) => op.toJson()).toList();
+    delta = t.deltaToArray(event.delta);
   });
   text0.insert(0, 'abcde', { 'falsy': false });
-  expect(text0.toDelta(), [{ 'insert': 'abcde', 'attributes': { 'falsy': false } }]);
-  expect(delta, [{ 'insert': 'abcde', 'attributes': { 'falsy': false } }]);
+  expect(text0.toDelta(), equals([{ 'insert': 'abcde', 'attributes': { 'falsy': false } }]));
+  expect(delta, equals([{ 'insert': 'abcde', 'attributes': { 'falsy': false } }]));
   text0.format(1, 3, { 'falsy': true });
-  expect(text0.toDelta(), [{ 'insert': 'a', 'attributes': { 'falsy': false } }, { 'insert': 'bcd', 'attributes': { 'falsy': true } }, { 'insert': 'e', 'attributes': { 'falsy': false } }]);
-  expect(delta, [{ 'retain': 1 }, { 'retain': 3, 'attributes': { 'falsy': true } }]);
+  expect(text0.toDelta(), equals([{ 'insert': 'a', 'attributes': { 'falsy': false } }, { 'insert': 'bcd', 'attributes': { 'falsy': true } }, { 'insert': 'e', 'attributes': { 'falsy': false } }]));
+  expect(delta, equals([{ 'retain': 1 }, { 'retain': 3, 'attributes': { 'falsy': true } }]));
   text0.format(2, 1, { 'falsy': false });
-  expect(text0.toDelta(), [{ 'insert': 'a', 'attributes': { 'falsy': false } }, { 'insert': 'b', 'attributes': { 'falsy': true } }, { 'insert': 'c', 'attributes': { 'falsy': false } }, { 'insert': 'd', 'attributes': { 'falsy': true } }, { 'insert': 'e', 'attributes': { 'falsy': false } }]);
-  expect(delta, [{ 'retain': 2 }, { 'retain': 1, 'attributes': { 'falsy': false } }]);
+  expect(text0.toDelta(), equals([{ 'insert': 'a', 'attributes': { 'falsy': false } }, { 'insert': 'b', 'attributes': { 'falsy': true } }, { 'insert': 'c', 'attributes': { 'falsy': false } }, { 'insert': 'd', 'attributes': { 'falsy': true } }, { 'insert': 'e', 'attributes': { 'falsy': false } }]));
+  expect(delta, equals([{ 'retain': 2 }, { 'retain': 1, 'attributes': { 'falsy': false } }]));
   compare(users);
 }
 
@@ -2055,13 +2098,13 @@ void testMultilineFormat(t.TestCase _tc) {
     { 'retain': 1 }, // newline character
     { 'retain': 10, 'attributes': { 'bold': true } }
   ]);
-  expect(testText.toDelta(), [
+  expect(testText.toDelta(), equals([
     { 'insert': 'Test', 'attributes': { 'bold': true } },
     { 'insert': '\n' },
     { 'insert': 'Multi-line', 'attributes': { 'bold': true } },
     { 'insert': '\n' },
     { 'insert': 'Formatting', 'attributes': { 'bold': true } }
-  ]);
+  ]));
 }
 
 /**
@@ -2076,12 +2119,12 @@ void testNotMergeEmptyLinesFormat(t.TestCase _tc) {
     { 'insert': '\nText' },
     { 'insert': '\n', 'attributes': { 'title': true } }
   ]);
-  expect(testText.toDelta(), [
+  expect(testText.toDelta(), equals([
     { 'insert': 'Text' },
     { 'insert': '\n', 'attributes': { 'title': true } },
     { 'insert': '\nText' },
     { 'insert': '\n', 'attributes': { 'title': true } }
-  ]);
+  ]));
 }
 
 /**
@@ -2100,10 +2143,10 @@ void testPreserveAttributesThroughDelete(t.TestCase _tc) {
     { 'delete': 1 },
     { 'retain': 1, 'attributes': { 'title': true } }
   ]);
-  expect(testText.toDelta(), [
+  expect(testText.toDelta(), equals([
     { 'insert': 'Text' },
     { 'insert': '\n', 'attributes': { 'title': true } }
-  ]);
+  ]));
 }
 
 /**
@@ -2115,9 +2158,9 @@ void testGetDeltaWithEmbeds(t.TestCase tc) {
   text0.applyDelta([{
     'insert': { 'linebreak': 's' }
   }]);
-  expect(text0.toDelta(), [{
+  expect(text0.toDelta(), equals([{
     'insert': { 'linebreak': 's' }
-  }]);
+  }]));
 }
 
 /**
@@ -2146,119 +2189,139 @@ void testTypesAsEmbed(t.TestCase tc) {
   expect((delta[0]['insert'] as y.YMap).toJSON(), equals({ 'key': 'val' }));
   expect(firedEvent, true, reason: 'fired the event observer containing a Type-Embed');
 }
-/**  
+
 /**
  * @param {t.TestCase} tc
  */
 void testSnapshot(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  final doc0 = /** @type {Y.Doc} */ (text0.doc)
-  doc0.gc = false
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  final doc0 = /** @type {Y.Doc} */ (text0.doc)!;
+  doc0.gc = false;
   text0.applyDelta([{
-    insert: 'abcd'
-  }])
-  final snapshot1 = Y.snapshot(doc0)
+    'insert': 'abcd'
+  }]);
+  final snapshot1 = y.snapshot(doc0);
   text0.applyDelta([{
-    retain: 1
+    'retain': 1
   }, {
-    insert: 'x'
+    'insert': 'x'
   }, {
-    delete: 1
-  }])
-  final snapshot2 = Y.snapshot(doc0)
+    'delete': 1
+  }]);
+  final snapshot2 = y.snapshot(doc0);
   text0.applyDelta([{
-    retain: 2
+    'retain': 2
   }, {
-    delete: 3
+    'delete': 3
   }, {
-    insert: 'x'
+    'insert': 'x'
   }, {
-    delete: 1
-  }])
-  final state1 = text0.toDelta(snapshot1)
-  expect(state1, [{ insert: 'abcd' }])
-  final state2 = text0.toDelta(snapshot2)
-  expect(state2, [{ insert: 'axcd' }])
-  final state2Diff = text0.toDelta(snapshot2, snapshot1)
+    'delete': 1
+  }]);
+  final state1 = text0.toDelta(snapshot1);
+  expect(state1, equals([{ 'insert': 'abcd' }]));
+  final state2 = text0.toDelta(snapshot2);
+  expect(state2, equals([{ 'insert': 'axcd' }]));
+  final state2Diff = text0.toDelta(snapshot2, snapshot1);
   // @ts-ignore Remove userid info
-  state2Diff.forEach(v => {
-    if (v.attributes && v.attributes.ychange) {
-      delete v.attributes.ychange.user
+  state2Diff.forEach((v) {
+    final ychange = (v['attributes'] as Map?)?['ychange'] as Map?;
+    if (ychange != null) {
+      ychange.remove('user');
     }
-  })
-  expect(state2Diff, [{ insert: 'a' }, { insert: 'x', attributes: { ychange: { type: 'added' } } }, { insert: 'b', attributes: { ychange: { type: 'removed' } } }, { insert: 'cd' }])
+  });
+  expect(state2Diff, equals([
+    { 'insert': 'a' }, 
+    { 'insert': 'x', 'attributes': { 'ychange': { 'type': 'added' } } }, 
+    { 'insert': 'b', 'attributes': { 'ychange': { 'type': 'removed' } } }, 
+    { 'insert': 'cd' }]));
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testSnapshotDeleteAfter(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  final doc0 = /** @type {Y.Doc} */ (text0.doc)
-  doc0.gc = false
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  final doc0 = /** @type {Y.Doc} */ (text0.doc)!;
+  doc0.gc = false;
   text0.applyDelta([{
-    insert: 'abcd'
-  }])
-  final snapshot1 = Y.snapshot(doc0)
+    'insert': 'abcd'
+  }]);
+  final snapshot1 = y.snapshot(doc0);
   text0.applyDelta([{
-    retain: 4
+    'retain': 4
   }, {
-    insert: 'e'
-  }])
-  final state1 = text0.toDelta(snapshot1)
-  expect(state1, [{ insert: 'abcd' }])
+    'insert': 'e'
+  }]);
+  final state1 = text0.toDelta(snapshot1);
+  expect(state1, equals([{ 'insert': 'abcd' }]));
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testToJson(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  text0.insert(0, 'abc', { bold: true })
-  expect(text0.toJSON() === 'abc', 'toJSON returns the unformatted text')
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  text0.insert(0, 'abc', { 'bold': true });
+  expect(text0.toJSON(), 'abc', reason: 'toJSON returns the unformatted text');
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testToDeltaEmbedAttributes(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  text0.insert(0, 'ab', { bold: true })
-  text0.insertEmbed(1, { image: 'imageSrc.png' }, { width: 100 })
-  final delta0 = text0.toDelta()
-  expect(delta0, [{ insert: 'a', attributes: { bold: true } }, { insert: { image: 'imageSrc.png' }, attributes: { width: 100 } }, { insert: 'b', attributes: { bold: true } }])
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  text0.insert(0, 'ab', { 'bold': true });
+  text0.insertEmbed(1, { 'image': 'imageSrc.png' }, { 'width': 100 });
+  final delta0 = text0.toDelta();
+  expect(delta0, equals([
+    { 'insert': 'a', 'attributes': { 'bold': true } }, 
+    { 'insert': { 'image': 'imageSrc.png' }, 'attributes': { 'width': 100 } }, 
+    { 'insert': 'b', 'attributes': { 'bold': true } }
+  ]));
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testToDeltaEmbedNoAttributes(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  text0.insert(0, 'ab', { bold: true })
-  text0.insertEmbed(1, { image: 'imageSrc.png' })
-  final delta0 = text0.toDelta()
-  expect(delta0, [{ insert: 'a', attributes: { bold: true } }, { insert: { image: 'imageSrc.png' } }, { insert: 'b', attributes: { bold: true } }], 'toDelta does not set attributes key when no attributes are present')
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  text0.insert(0, 'ab', { 'bold': true });
+  text0.insertEmbed(1, { 'image': 'imageSrc.png' });
+  final delta0 = text0.toDelta();
+  expect(delta0, equals([
+    { 'insert': 'a', 'attributes': { 'bold': true } }, 
+    { 'insert': { 'image': 'imageSrc.png' } }, 
+    { 'insert': 'b', 'attributes': { 'bold': true } }
+  ]), reason: 'toDelta does not set attributes key when no attributes are present');
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testFormattingRemoved(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  text0.insert(0, 'ab', { bold: true })
-  text0.delete(0, 2)
-  expect(Y.getTypeChildren(text0).length === 1)
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  text0.insert(0, 'ab', { 'bold': true });
+  text0.delete(0, 2);
+  expect(y.getTypeChildren(text0).length, 1);
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testFormattingRemovedInMidText(t.TestCase tc) {
-  final { text0 } = init(tc, { users: 1 })
-  text0.insert(0, '1234')
-  text0.insert(2, 'ab', { bold: true })
-  text0.delete(2, 2)
-  expect(Y.getTypeChildren(text0).length === 3)
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  text0.insert(0, '1234');
+  text0.insert(2, 'ab', { 'bold': true });
+  text0.delete(2, 2);
+  expect(y.getTypeChildren(text0).length, 3);
 }
 
 /**
@@ -2267,76 +2330,80 @@ void testFormattingRemovedInMidText(t.TestCase tc) {
  * @param {t.TestCase} tc
  */
 void testFormattingDeltaUnnecessaryAttributeChange(t.TestCase tc) {
-  final { text0, text1, testConnector } = init(tc, { users: 2 })
+  final results = init(tc, users: 2),
+    testConnector = results['testConnector'] as TestConnector,
+    text0 = results['text0'] as YText,
+    text1 = results['text1'] as YText;
   text0.insert(0, '\n', {
-    PARAGRAPH_STYLES: 'normal',
-    LIST_STYLES: 'bullet'
-  })
+    'PARAGRAPH_STYLES': 'normal',
+    'LIST_STYLES': 'bullet'
+  });
   text0.insert(1, 'abc', {
-    PARAGRAPH_STYLES: 'normal'
-  })
-  testConnector.flushAllMessages()
+    'PARAGRAPH_STYLES': 'normal'
+  });
+  testConnector.flushAllMessages();
   /**
    * @type {Array<any>}
    */
-  final deltas = []
+  final deltas = [];
   text0.observe((event, _) {
-    deltas.push(event.delta)
-  })
+    deltas.add(t.deltaToArray(event.delta));
+  });
   text1.observe((event, _) {
-    deltas.push(event.delta)
-  })
-  text1.format(0, 1, { LIST_STYLES: 'number' })
-  testConnector.flushAllMessages()
-  final filteredDeltas = deltas.filter(d => d.length > 0)
-  expect(filteredDeltas.length === 2)
-  expect(filteredDeltas[0], [
-    { retain: 1, attributes: { LIST_STYLES: 'number' } }
-  ])
-  expect(filteredDeltas[0], filteredDeltas[1])
+    deltas.add(t.deltaToArray(event.delta));
+  });
+  text1.format(0, 1, { 'LIST_STYLES': 'number' });
+  testConnector.flushAllMessages();
+  final filteredDeltas = deltas.where((d) => d.length > 0).toList();
+  expect(filteredDeltas.length, 2);
+  expect(filteredDeltas[0], equals([
+    { 'retain': 1, 'attributes': { 'LIST_STYLES': 'number' } }
+  ]));
+  expect(filteredDeltas[0], equals(filteredDeltas[1]));
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testInsertAndDeleteAtRandomPositions(t.TestCase tc) {
-  final N = 100000
-  final { text0 } = init(tc, { users: 1 })
-  final gen = tc.prng
+  final N = 100000;
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
+  final gen = tc.prng;
 
   // create initial content
   // var expectedResult = init
-  text0.insert(0, prng.word(gen, N / 2, N / 2))
+  text0.insert(0, prng.word(gen, N ~/ 2, N ~/ 2));
 
   // apply changes
   for (var i = 0; i < N; i++) {
-    final pos = prng.uint32(gen, 0, text0.length)
-    if (prng.bool(gen)) {
-      final len = prng.uint32(gen, 1, 5)
-      final word = prng.word(gen, 0, len)
-      text0.insert(pos, word)
+    final pos = prng.uint32(gen, 0, text0.length);
+    if (prng.randomBool(gen)) {
+      final len = prng.uint32(gen, 1, 5);
+      final word = prng.word(gen, 0, len);
+      text0.insert(pos, word);
       // expectedResult = expectedResult.slice(0, pos) + word + expectedResult.slice(pos)
     } else {
-      final len = prng.uint32(gen, 0, math.min(3, text0.length - pos))
-      text0.delete(pos, len)
+      final len = prng.uint32(gen, 0, math.min(3, text0.length - pos));
+      text0.delete(pos, len);
       // expectedResult = expectedResult.slice(0, pos) + expectedResult.slice(pos + len)
     }
   }
   // t.compareStrings(text0.toString(), expectedResult)
-  t.describe('final length', '' + text0.length)
+  // t.describe('final length', '' + text0.length)
 }
 
 /**
  * @param {t.TestCase} tc
  */
 void testAppendChars(t.TestCase tc) {
-  final N = 10000
-  final { text0 } = init(tc, { users: 1 })
+  final N = 10000;
+  final results = init(tc, users: 1 ),
+    text0 = results['text0'] as YText;
 
   // apply changes
   for (var i = 0; i < N; i++) {
-    text0.insert(text0.length, 'a')
+    text0.insert(text0.length, 'a');
   }
-  expect(text0.length === N)
+  expect(text0.length, N);
 }
-*/

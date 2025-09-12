@@ -3,6 +3,8 @@ import "package:test/test.dart";
 import 'dart:async';
 import 'dart:math';
 
+import "package:dart_quill_delta/dart_quill_delta.dart" show Operation;
+
 void printRed(String msg) {
   // ignore: avoid_print
   print('\x1B[31m$msg\x1B[0m');
@@ -21,6 +23,10 @@ void printYellow(String msg) {
 void printBlue(String msg) {
   // ignore: avoid_print
   print('\x1B[34m$msg\x1B[0m');
+}
+
+List<Map> deltaToArray(List<Operation> delta) {
+  return delta.map((item) => item.toJson()).toList();
 }
 
 class TestCase {

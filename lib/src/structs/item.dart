@@ -792,12 +792,14 @@ class Item extends AbstractStruct {
 
   @override
   String toString() {
-    return 'Item(id: $id, '
-      'length: $length, origin: $origin, rightOrigin: $rightOrigin, '
-      'left: ${left}, right: ${right}, info: $info, '
-      'parent: $parent, parentSub: $parentSub, '
-      'content: $content, deleted: $deleted, '
-      'redone: $redone, keep: $keep, countable: $countable)';
+    return 'Item(id: $id, \n'
+      '\tlength: $length, origin: $origin, rightOrigin: $rightOrigin, \n'
+      '\tleft: ${left?.content}, \n'
+      '\tright: ${right?.content}, \n'
+      '\tinfo: $info, \n'
+      '\tparent: ${parent}, parentSub: $parentSub, \n'
+      '\tcontent: $content, deleted: $deleted, \n'
+      '\tredone: $redone, keep: $keep, countable: $countable)';
   }
 }
 

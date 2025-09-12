@@ -483,12 +483,12 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
       reachedCurr = true;
     }
     if (!start!.deleted) {
-      final content = start.content;
-      if (content is ContentFormat) {
-        final key = content.key,
+      switch(start.content) {
+        case ContentFormat content:
+          final key = content.key,
           value = content.value,
           startAttrValue = startAttributes.get(key);
-        if (endFormats.get(key) != content || startAttrValue == content) {
+        if (endFormats.get(key) != content || startAttrValue == value) {
           // Either this format is overwritten or it is not necessary because the attribute already existed.
           start.delete(transaction);
           cleanups++;
@@ -500,7 +500,7 @@ int cleanupFormattingGap(Transaction transaction, Item _start, Item? curr,
             }
           }
         }
-         if (!reachedCurr && !start.deleted) {
+        if (!reachedCurr && !start.deleted) {
           updateCurrentAttributes(currAttributes, content);
         }
         break;
@@ -650,20 +650,19 @@ ItemTextListPosition deleteText(
   final startLength = length;
   final startAttrs = {...currPos.currentAttributes};
   final start = currPos.right;
-  while (length > 0 && currPos.right != null) {
-    final _right = currPos.right!;
-    if (_right.deleted == false) {
-      switch(_right.content) {
+  Item? right;
+  while (length > 0 && (right = currPos.right) != null) {
+    if (right!.deleted == false) {
+      switch (right.content) {
         case ContentType _:
         case ContentEmbed _:
         case ContentString _:
-          if (length < _right.length) {
-            getItemCleanStart(transaction,
-                createID(_right.id.client, _right.id.clock + length));
+          if (length < right.length) {
+            getItemCleanStart(transaction, createID(right.id.client, right.id.clock + length));
           }
-          length -= _right.length;
-          _right.delete(transaction);
-
+          length -= right.length;
+          right.delete(transaction);
+          break;
       }
     }
     currPos.forward();

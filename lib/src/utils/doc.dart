@@ -103,7 +103,7 @@ class Doc extends Observable<String> {
   }
 
 
-  final bool gc;
+  bool gc;
   final bool Function(Item) gcFilter;
   int clientID = generateNewClientId();
   late String guid;

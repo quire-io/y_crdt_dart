@@ -54,6 +54,8 @@ import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
 import 'package:y_crdt/y_crdt.dart' show AbstractStruct;
 
+import "package:dart_quill_delta/dart_quill_delta.dart" show Operation;
+
 /**
  * @param {any} a
  * @param {any} b
@@ -777,7 +779,7 @@ class YTextEvent extends YEvent {
   /**
      * @type {List<DeltaItem>|null}
      */
-  List<DeltaItem>? _delta;
+  List<Operation>? _delta;
 
   /**
    * Compute the changes in the delta format.
@@ -788,7 +790,7 @@ class YTextEvent extends YEvent {
    * @public
    */
   @override
-  List<DeltaItem> get delta {
+  List<Operation> get delta {
     var delta = this._delta;
     if (delta == null) {
       final y = /** @type {Doc} */ this.target.doc!;
@@ -818,15 +820,16 @@ class YTextEvent extends YEvent {
             /**
              * @type {any}
              */
-            DeltaItem? op;
+            Operation? op;
             switch (action) {
               case "delete":
               if (deleteLen > 0)
-                  op = DeltaItem.delete(deleteLen, attributes: null);
+                  op = Operation.delete(deleteLen);
                 deleteLen = 0;
                 break;
               case "insert":
-                if (insert is Map || (insert is String && (insert as String).isNotEmpty)) {
+                if (insert is Map || insert is AbstractType
+                    || (insert is String && (insert as String).isNotEmpty)) {
                   Map<String, dynamic>? _attr;
                   if (currentAttributes.length > 0) {
                     _attr = {};
@@ -836,14 +839,17 @@ class YTextEvent extends YEvent {
                       }
                     });
                   }
-                  op = DeltaItem.insert(insert, attributes: _attr);
+                  op = Operation.insert(switch(insert) {
+                    AbstractType type => type.toJSON(),
+                    _ => insert,
+                  }, _attr);
                 }
                 insert = '';
                 break;
               case "retain":
                 if (retain > 0)
-                  op = DeltaItem.retain(retain,
-                      attributes: attributes.length > 0 ? {...attributes} : null);
+                  op = Operation.retain(retain,
+                      attributes.length > 0 ? {...attributes} : null);
                 retain = 0;
                 break;
               default:

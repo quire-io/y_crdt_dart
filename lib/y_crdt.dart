@@ -37,6 +37,7 @@ export 'package:y_crdt/src/utils/delete_set.dart'
         createDeleteSetFromStructStore,
         iterateDeletedStructs,
         isDeleted,
+        equalDeleteSets,
         DeleteSet;
 export 'package:y_crdt/src/utils/doc.dart' show Doc;
 export 'package:y_crdt/src/utils/encoding.dart'
@@ -85,6 +86,8 @@ export 'package:y_crdt/src/utils/struct_store.dart'
 export 'package:y_crdt/src/utils/transaction.dart'
     show transact, Transaction, tryGc;
 export 'package:y_crdt/src/utils/undo_manager.dart' show UndoManager;
+export 'package:y_crdt/src/utils/updates.dart'
+    show mergeUpdates, mergeUpdatesV2, logUpdate, logUpdateV2, diffUpdate, diffUpdateV2;
 export 'package:y_crdt/src/utils/y_event.dart'
     show YEvent, YChanges, YChange, YChangeType;
 export 'package:y_crdt/src/y_crdt_base.dart';

@@ -110,7 +110,6 @@ class DSDecoderV1 implements AbstractDSDecoder {
   DSDecoderV1(this.restDecoder);
   @override
   final decoding.Decoder restDecoder;
-  static DSDecoderV1 create(decoding.Decoder decoder) => DSDecoderV1(decoder);
 
   @override
   resetDsCurVal() {
@@ -135,9 +134,7 @@ class DSDecoderV1 implements AbstractDSDecoder {
 }
 
 class UpdateDecoderV1 extends DSDecoderV1 implements AbstractUpdateDecoder {
-  UpdateDecoderV1(Decoder decoder) : super(decoder);
-  static UpdateDecoderV1 create(decoding.Decoder decoder) =>
-      UpdateDecoderV1(decoder);
+  UpdateDecoderV1(super.decoder);
 
   /**
    * @return {ID}
@@ -274,31 +271,20 @@ class DSDecoderV2 implements AbstractDSDecoder {
 }
 
 class UpdateDecoderV2 extends DSDecoderV2 implements AbstractUpdateDecoder {
-  static UpdateDecoderV2 create(decoding.Decoder decoder) =>
-      UpdateDecoderV2(decoder);
   /**
    * @param {decoding.Decoder} decoder
    */
   UpdateDecoderV2(Decoder decoder) : super(decoder) {
-    decoding.readUint8(decoder); // read feature flag - currently unused
-    this.keyClockDecoder =
-        decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
-    this.clientDecoder =
-        decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
-    this.leftClockDecoder =
-        decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
-    this.rightClockDecoder =
-        decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
-    this.infoDecoder = decoding.RleDecoder(
-        decoding.readVarUint8Array(decoder), decoding.readUint8);
-    this.stringDecoder =
-        decoding.StringDecoder(decoding.readVarUint8Array(decoder));
-    this.parentInfoDecoder = decoding.RleDecoder(
-        decoding.readVarUint8Array(decoder), decoding.readUint8);
-    this.typeRefDecoder =
-        decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
-    this.lenDecoder =
-        decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
+    decoding.readVarUint(decoder); // read feature flag - currently unused
+    this.keyClockDecoder = decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
+    this.clientDecoder = decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
+    this.leftClockDecoder = decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
+    this.rightClockDecoder = decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
+    this.infoDecoder = decoding.RleDecoder(decoding.readVarUint8Array(decoder), decoding.readUint8);
+    this.stringDecoder = decoding.StringDecoder(decoding.readVarUint8Array(decoder));
+    this.parentInfoDecoder = decoding.RleDecoder(decoding.readVarUint8Array(decoder), decoding.readUint8);
+    this.typeRefDecoder = decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
+    this.lenDecoder = decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
   }
   /**
      * List of cached keys. If the keys[id] does not exist, we read a new key

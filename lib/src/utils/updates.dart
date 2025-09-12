@@ -115,11 +115,11 @@ class LazyStructReader {
    * @param {boolean} filterSkips
    */
   LazyStructReader (AbstractUpdateDecoder decoder, this.filterSkips):
-    this.gen = lazyStructReaderGenerator(decoder) {
+    this.gen = lazyStructReaderGenerator(decoder).iterator {
     this.next();
   }
 
-  final Iterable<AbstractStruct> gen;
+  final Iterator<AbstractStruct> gen;
 
   bool done = false;
 
@@ -135,7 +135,7 @@ class LazyStructReader {
    */
   AbstractStruct? next () {
     // ignore "Skip" structs
-    final it = this.gen.iterator;
+    final it = this.gen;
     do {
       this.curr = it.moveNext() ? it.current : null;
     } while (this.filterSkips && this.curr != null && this.curr is Skip);
@@ -155,7 +155,7 @@ void logUpdate(Uint8List update) => logUpdateV2(update,
  * @param {typeof UpdateDecoderV2 | typeof UpdateDecoderV1} [YDecoder]
  *
  */
-void logUpdateV2(Uint8List update, AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?) {
+void logUpdateV2(Uint8List update, [AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?]) {
   YDecoder ??= UpdateDecoderV2.new;
   final structs = [];
   final updateDecoder = YDecoder(decoding.createDecoder(update));
@@ -165,7 +165,6 @@ void logUpdateV2(Uint8List update, AbstractUpdateDecoder YDecoder(decoding.Decod
   }
   // logging.print('Structs: ', structs)
   readDeleteSet(updateDecoder);
-  // final ds = readDeleteSet(updateDecoder);
   // logging.print('DeleteSet: ', ds)
 }
 
@@ -399,7 +398,7 @@ Uint8List mergeUpdatesV2(Iterable<Uint8List> updates, [
   if (updates.length == 1) {
     return updates.first;
   }
-  final updateDecoders = updates.map((update) => YDecoder!(decoding.createDecoder(update)));
+  final updateDecoders = updates.map((update) => YDecoder!(decoding.createDecoder(update))).toList();
   var lazyStructDecoders = updateDecoders.map((decoder) => LazyStructReader(decoder, true)).toList();
 
   /**
@@ -499,15 +498,10 @@ Uint8List mergeUpdatesV2(Iterable<Uint8List> updates, [
         }
       }
     } else {
-
-      final struct = currDecoder.curr;
-      if (struct is! Item && struct is! GC) {
-        throw Exception('Unexpected case');
-      }
-
-      currWrite = _Write(struct!, 0);
+      currWrite = _Write(currDecoder.curr as AbstractStruct, 0);
       currDecoder.next();
     }
+    
     for (
       var next = currDecoder.curr;
       next != null && next.id.client == firstClient 
@@ -519,6 +513,7 @@ Uint8List mergeUpdatesV2(Iterable<Uint8List> updates, [
       currWrite = _Write(next, 0);
     }
   }
+  
   if (currWrite != null) {
     writeStructToLazyStructWriter(lazyStructEncoder, currWrite.struct, currWrite.offset);
     currWrite = null;

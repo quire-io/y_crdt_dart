@@ -21,9 +21,11 @@
 
 import 'dart:math' as math;
 
+import 'package:y_crdt/src/lib0/function.dart' show callAll;
 import 'package:y_crdt/src/structs/abstract_struct.dart';
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/types/abstract_type.dart';
+import 'package:y_crdt/src/types/y_text.dart' show cleanupYTextAfterTransaction;
 import 'package:y_crdt/src/utils/delete_set.dart';
 import 'package:y_crdt/src/utils/doc.dart';
 import 'package:y_crdt/src/utils/encoding.dart';
@@ -181,25 +183,32 @@ void addChangedTypeToTransaction(
 }
 
 /**
- * @param {List<AbstractStruct>} structs
+ * @param {Array<AbstractStruct>} structs
  * @param {number} pos
+ * @return {number} # of merged structs
  */
-void tryToMergeWithLeft(List<AbstractStruct> structs, int pos) {
-  final left = structs[pos - 1];
-  final right = structs[pos];
-  if (left.deleted == right.deleted && left.runtimeType == right.runtimeType) {
-    if (left.mergeWith(right)) {
-      structs.removeAt(pos);
-      if (right is Item &&
-          right.parentSub != null &&
-          (right.parent as AbstractType).innerMap.get(right.parentSub!) ==
-              right) {
-        (right.parent as AbstractType)
-            .innerMap
-            .set(right.parentSub!, /** @type {Item} */ left as Item);
+int tryToMergeWithLefts(List<AbstractStruct> structs, int pos) {
+  AbstractStruct? right = structs[pos];
+  AbstractStruct? left = structs[pos - 1];
+  var i = pos;
+  for (; i > 0; right = left, left = atX(structs, --i - 1)) {
+    if (left!.deleted == right!.deleted && left.runtimeType == right.runtimeType) {
+      if (left.mergeWith(right)) {
+        if (right is Item && right.parentSub != null && (right.parent as AbstractType).innerMap.get(right.parentSub!) == right) {
+          (right.parent as AbstractType).innerMap.set(right.parentSub!, left as Item);
+        }
+        continue;
       }
     }
+    break;
   }
+  final merged = pos - i;
+  if (merged != 0) {
+    // remove all merged structs from the array
+    final index = pos + 1 - merged;
+    structs.removeRange(index, index + merged);
+  }
+  return merged;
 }
 
 /**
@@ -217,9 +226,10 @@ void tryGcDeleteSet(
       final deleteItem = deleteItems[di];
       final endDeleteItemClock = deleteItem.clock + deleteItem.len;
 
-      for (var si = findIndexSS(structs, deleteItem.clock);
-          si < structs.length && structs[si].id.clock < endDeleteItemClock;
-          si++) {
+      var si = findIndexSS(structs, deleteItem.clock);
+      AbstractStruct? struct = structs[si];
+      for (;si < structs.length && struct!.id.clock < endDeleteItemClock;
+          struct = atX(structs, ++si)) {
         final struct = structs[si];
         if (deleteItem.clock + deleteItem.len <= struct.id.clock) {
           break;
@@ -250,10 +260,12 @@ void tryMergeDeleteSet(DeleteSet ds, StructStore store) {
         // start with merging the item next to the last deleted item
         final mostRightIndexToCheck = math.min(structs.length - 1,
             1 + findIndexSS(structs, deleteItem.clock + deleteItem.len - 1));
-        for (var si = mostRightIndexToCheck, struct = structs[si];
-            si > 0 && struct.id.clock >= deleteItem.clock;
-            struct = structs[--si]) {
-          tryToMergeWithLeft(structs, si);
+        
+        var si = mostRightIndexToCheck;
+        AbstractStruct? struct = structs[si];
+        for (;si > 0 && struct!.id.clock >= deleteItem.clock;
+            struct = atX(structs, si)) {
+          si -= 1 + tryToMergeWithLefts(structs, si);
         }
       }
     }
@@ -284,7 +296,6 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
     try {
       sortAndMergeDeleteSet(ds);
       transaction.afterState = getStateVector(transaction.doc.store);
-      doc.transaction = null;
       doc.emit('beforeObserverCalls', [transaction, doc]);
       /**
        * An array of event callbacks.
@@ -295,49 +306,41 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
        */
       final fs = <void Function()>[];
       // observe events on changed types
-      transaction.changed.forEach((itemtype, subs) => fs.add(() {
-            if (itemtype.innerItem == null || !itemtype.innerItem!.deleted) {
-              itemtype.innerCallObserver(transaction, subs);
-            }
-          }));
+      transaction.changed.forEach((itemtype, subs) => 
+        fs.add(() {
+          if (itemtype.innerItem == null || !itemtype.innerItem!.deleted) {
+            itemtype.innerCallObserver(transaction, subs);
+          }
+        }));
       fs.add(() {
         // deep observe events
-        transaction.changedParentTypes.forEach((type, events) => fs.add(() {
-              // We need to think about the possibility that the user transforms the
-              // Y.Doc in the event.
-              if (type.innerItem == null || !type.innerItem!.deleted) {
-                events = events
-                    .where((event) =>
-                        event.target.innerItem == null ||
-                        !event.target.innerItem!.deleted)
-                    .toList();
-                events.forEach((event) {
-                  event.currentTarget = type;
-                });
-                // sort events by path length so that top-level events are fired first.
-                events.sort((event1, event2) =>
-                    event1.path.length - event2.path.length);
-                // We don't need to check for events.length
-                // because we know it has at least one element
-                callEventHandlerListeners(type.innerdEH, events, transaction);
-              }
-            }));
-        fs.add(() => doc.emit('afterTransaction', [transaction, doc]));
+        transaction.changedParentTypes.forEach((type, events) {
+          // We need to think about the possibility that the user transforms the
+          // Y.Doc in the event.
+          if (type.innerDEH.l.length > 0 && (type.innerItem == null || !type.innerItem!.deleted)) {
+            events = events
+              .where((event) =>
+                event.target.innerItem == null || !event.target.innerItem!.deleted
+              ).toList();
+            events
+              .forEach((event) {
+                event.currentTarget = type;
+                // path is relative to the current target
+                event.innerPath = null;
+              });
+            // sort events by path length so that top-level events are fired first.
+            events
+              .sort((event1, event2) => event1.path.length - event2.path.length);
+            // We don't need to check for events.length
+            // because we know it has at least one element
+            callEventHandlerListeners(type.innerDEH, events, transaction);
+          }
+        });
       });
-      Object? _err;
-      // https://github.com/dart-lang/sdk/issues/30741
-      // StackTrace? _stack;
-      for (var i = 0; i < fs.length; i++) {
-        try {
-          fs[i]();
-        } catch (e) {
-          _err = e;
-          // _stack = s;
-        }
-      }
-      if (_err != null) {
-        // logger.e("Exception from observer", _err, _stack);
-        throw _err;
+      fs.add(() => doc.emit('afterTransaction', [transaction, doc]));
+      callAll(fs, []);
+      if (transaction.innerNeedFormattingCleanup) {
+        cleanupYTextAfterTransaction(transaction);
       }
     } finally {
       // Replace deleted items with ItemDeleted / GC.
@@ -354,30 +357,26 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
           final structs =
               /** @type {List<GC|Item>} */ store.clients.get(client);
           // we iterate from right to left so we can safely remove entries
-          if (structs != null) {
-            final firstChangePos =
-                math.max(findIndexSS(structs, beforeClock), 1);
-            for (var i = structs.length - 1; i >= firstChangePos; i--) {
-              tryToMergeWithLeft(structs, i);
-            }
+          final firstChangePos = math.max(findIndexSS(structs!, beforeClock), 1);
+          for (var i = structs.length - 1; i >= firstChangePos;) {
+            i -= 1 + tryToMergeWithLefts(structs, i);
           }
         }
       });
       // try to merge mergeStructs
       // @todo: it makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
       //        but at the moment DS does not handle duplicates
-      for (var i = 0; i < mergeStructs.length; i++) {
-        final client = mergeStructs[i].id.client;
-        final clock = mergeStructs[i].id.clock;
-        final structs = /** @type {List<GC|Item>} */ store.clients.get(client);
-        if (structs != null) {
-          final replacedStructPos = findIndexSS(structs, clock);
-          if (replacedStructPos + 1 < structs.length) {
-            tryToMergeWithLeft(structs, replacedStructPos + 1);
+      for (var i = mergeStructs.length - 1; i >= 0; i--) {
+        final (client, clock) = mergeStructs[i].id.get;
+        final structs = /** @type {List<GC|Item>} */ store.clients.get(client)!;
+        final replacedStructPos = findIndexSS(structs, clock);
+        if (replacedStructPos + 1 < structs.length) {
+          if (tryToMergeWithLefts(structs, replacedStructPos + 1) > 1) {
+            continue; // no need to perform next check, both are already merged
           }
-          if (replacedStructPos > 0) {
-            tryToMergeWithLeft(structs, replacedStructPos);
-          }
+        }
+        if (replacedStructPos > 0) {
+          tryToMergeWithLefts(structs, replacedStructPos);
         }
       }
       if (!transaction.local &&
@@ -394,7 +393,7 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
         final hasContent =
             writeUpdateMessageFromTransaction(encoder, transaction);
         if (hasContent) {
-          doc.emit('update', [encoder.toUint8Array(), transaction.origin, doc]);
+          doc.emit('update', [encoder.toUint8Array(), transaction.origin, doc, transaction]);
         }
       }
       if (doc.innerObservers.containsKey('updateV2')) {
@@ -402,22 +401,30 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
         final hasContent =
             writeUpdateMessageFromTransaction(encoder, transaction);
         if (hasContent) {
-          doc.emit(
-              'updateV2', [encoder.toUint8Array(), transaction.origin, doc]);
+          doc.emit('updateV2', [encoder.toUint8Array(), transaction.origin, doc, transaction]);
         }
       }
-      transaction.subdocsAdded.forEach((subdoc) => doc.subdocs.add(subdoc));
-      transaction.subdocsRemoved
-          .forEach((subdoc) => doc.subdocs.remove(subdoc));
 
-      doc.emit('subdocs', [
-        {
-          "loaded": transaction.subdocsLoaded,
-          "added": transaction.subdocsAdded,
-          "removed": transaction.subdocsRemoved
-        },
-      ]);
-      transaction.subdocsRemoved.forEach((subdoc) => subdoc.destroy());
+      final subdocsAdded = transaction.subdocsAdded;
+      final subdocsLoaded = transaction.subdocsLoaded;
+      final subdocsRemoved = transaction.subdocsRemoved;
+      if (subdocsAdded.isNotEmpty || subdocsRemoved.isNotEmpty || subdocsLoaded.isNotEmpty) {
+        subdocsAdded.forEach((subdoc) {
+          subdoc.clientID = doc.clientID;
+          if (subdoc.collectionid == null) {
+            subdoc.collectionid = doc.collectionid;
+          }
+          doc.subdocs.add(subdoc);
+        });
+        subdocsRemoved.forEach((subdoc) => doc.subdocs.remove(subdoc));
+        doc.emit('subdocs', [
+          { 
+            'loaded': subdocsLoaded, 
+            'added': subdocsAdded, 
+            'removed': subdocsRemoved 
+          }, doc, transaction]);
+        subdocsRemoved.forEach((subdoc) => subdoc.destroy());
+      }
 
       if (transactionCleanups.length <= i + 1) {
         doc.transactionCleanups = [];
@@ -432,16 +439,22 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
 /**
  * Implements the functionality of `y.transact(()=>{..})`
  *
+ * @template T
  * @param {Doc} doc
- * @param {function(Transaction):void} f
+ * @param {function(Transaction):T} f
  * @param {any} [origin=true]
+ * @return {T}
  *
  * @function
  */
-void transact(Doc doc, void Function(Transaction) f,
+dynamic transact(Doc doc, dynamic Function(Transaction) f,
     [Object? origin, bool local = true]) {
   final transactionCleanups = doc.transactionCleanups;
   var initialCall = false;
+  /**
+   * @type {any}
+   */
+  var result;
   if (doc.transaction == null) {
     initialCall = true;
     doc.transaction = Transaction(doc, origin, local);
@@ -452,9 +465,12 @@ void transact(Doc doc, void Function(Transaction) f,
     doc.emit('beforeTransaction', [doc.transaction, doc]);
   }
   try {
-    f(doc.transaction!);
+    result = f(doc.transaction!);
   } finally {
-    if (initialCall && transactionCleanups[0] == doc.transaction) {
+    if (initialCall) {
+      final finishCleanup = doc.transaction == transactionCleanups[0];
+      doc.transaction = null;
+      if (finishCleanup) {
       // The first transaction ended, now process observer calls.
       // Observer call may create new transactions for which we need to call the observers and do cleanup.
       // We don't want to nest these calls, so we execute these calls one after
@@ -463,7 +479,9 @@ void transact(Doc doc, void Function(Transaction) f,
       // observes throw errors.
       // This file is full of hacky try {} finally {} blocks to ensure that an
       // event can throw errors and also that the cleanup is called.
-      cleanupTransactions(transactionCleanups, 0);
+        cleanupTransactions(transactionCleanups, 0);
+      }
     }
   }
+  return result;
 }

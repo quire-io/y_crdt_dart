@@ -141,3 +141,8 @@ class _Right<L, R> extends Either<L, R> {
     this.value,
   ) : super._();
 }
+
+T? atX<T>(List? list, int index) {
+  if (list != null && list.length > index && index >= 0)
+    return list[index] as T?;
+}

@@ -113,6 +113,11 @@ class ContentAny implements AbstractContent {
   int getRef() {
     return 8;
   }
+
+  @override
+  String toString() {
+    return 'ContentAny(arr: $arr)';
+  }
 }
 
 /**

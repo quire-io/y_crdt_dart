@@ -31,22 +31,32 @@ import 'package:y_crdt/src/utils/is_parent_of.dart';
 import 'package:y_crdt/src/utils/observable.dart';
 import 'package:y_crdt/src/utils/struct_store.dart';
 import 'package:y_crdt/src/utils/transaction.dart';
-import 'package:y_crdt/src/y_crdt_base.dart';
 
 class StackItem {
   /**
-   * @param {DeleteSet} ds
-   * @param {Map<number,number>} beforeState
-   * @param {Map<number,number>} afterState
+   * @param {DeleteSet} deletions
+   * @param {DeleteSet} insertions
    */
-  StackItem(this.ds, this.beforeState, this.afterState);
-  DeleteSet ds;
-  final Map<int, int> beforeState;
-  Map<int, int> afterState;
+  StackItem(this.deletions, this.insertions);
+  DeleteSet deletions;
+  DeleteSet insertions;
   /**
      * Use this to save and restore metadata like selection range
      */
   final Map meta = {};
+}
+
+/**
+ * @param {Transaction} tr
+ * @param {UndoManager} um
+ * @param {StackItem} stackItem
+ */
+void clearUndoManagerStackItem(Transaction tr, UndoManager um, StackItem stackItem) {
+  iterateDeletedStructs(tr, stackItem.deletions, (item) {
+    if (item is Item && um.scope.any((type) => type == tr.doc || isParentOf(type as AbstractType, item))) {
+      keepItem(item, false);
+    }
+  });
 }
 
 /**
@@ -58,14 +68,14 @@ class StackItem {
 StackItem? popStackItem(
     UndoManager undoManager, List<StackItem> stack, String eventType) {
   /**
-   * Whether a change happened
-   * @type {StackItem?}
+   * Keep a reference to the transaction so we can fire the event with the changedParentTypes
+   * @type {any}
    */
-  StackItem? result;
+  late Transaction _tr;
   final doc = undoManager.doc;
   final scope = undoManager.scope;
   transact(doc, (transaction) {
-    while (stack.length > 0 && result == null) {
+    while (stack.length > 0 && undoManager.currStackItem == null) {
       final store = doc.store;
       final stackItem = /** @type {StackItem} */ stack.removeLast();
       /**
@@ -77,58 +87,36 @@ StackItem? popStackItem(
          */
       final itemsToDelete = <Item>[];
       var performedChange = false;
-      stackItem.afterState.forEach((client, endClock) {
-        final startClock = stackItem.beforeState.get(client) ?? 0;
-        final len = endClock - startClock;
-
-        // @todo iterateStructs should not need the structs parameter
-        final structs = /** @type {List<GC|Item>} */ store.clients.get(client);
-        if (startClock != endClock) {
-          // make sure structs don't overlap with the range of created operations [stackItem.start, stackItem.start + stackItem.end)
-          // this must be executed before deleted structs are iterated.
-          getItemCleanStart(transaction, createID(client, startClock));
-          if (endClock < getState(doc.store, client)) {
-            getItemCleanStart(transaction, createID(client, endClock));
-          }
-          iterateStructs(transaction, structs!, startClock, len, (struct) {
-            if (struct is Item) {
-              if (struct.redone != null) {
-                var (item, diff) = followRedone(store, struct.id);
-                if (diff > 0) {
-                  item = getItemCleanStart(transaction,
-                      createID(item.id.client, item.id.clock + diff));
-                }
-                if (item.length > len) {
-                  getItemCleanStart(
-                      transaction, createID(item.id.client, endClock));
-                }
-                struct = item;
-              }
-              if (!struct.deleted &&
-                  scope.any((type) =>
-                      isParentOf(type, /** @type {Item} */ struct as Item))) {
-                itemsToDelete.add(struct);
-              }
+      
+      iterateDeletedStructs(transaction, stackItem.insertions, (struct) {
+        if (struct is Item) {
+          if (struct.redone != null) {
+            var (item, diff) = followRedone(store, struct.id);
+            if (diff > 0) {
+              item = getItemCleanStart(transaction, createID(item.id.client, item.id.clock + diff));
             }
-          });
+            struct = item;
+          }
+          if (!struct.deleted && scope.any((type) => type == transaction.doc 
+              || isParentOf(/** @type {AbstractType<any>} */ (type), /** @type {Item} */ (struct as Item)))) {
+            itemsToDelete.add(struct);
+          }
         }
       });
-      iterateDeletedStructs(transaction, stackItem.ds, (struct) {
-        final id = struct.id;
-        final clock = id.clock;
-        final client = id.client;
-        final startClock = stackItem.beforeState.get(client) ?? 0;
-        final endClock = stackItem.afterState.get(client) ?? 0;
-        if (struct is Item &&
-            scope.any((type) => isParentOf(type, struct)) &&
-            // Never redo structs in [stackItem.start, stackItem.start + stackItem.end) because they were created and deleted in the same capture interval.
-            !(clock >= startClock && clock < endClock)) {
+      iterateDeletedStructs(transaction, stackItem.deletions, (struct) {
+        if (
+          struct is Item &&
+          scope.any((type) => type == transaction.doc || isParentOf(/** @type {AbstractType<any>} */ (type), struct)) &&
+          // Never redo structs in stackItem.insertions because they were created and deleted in the same capture interval.
+          !isDeleted(stackItem.insertions, struct.id)
+        ) {
           itemsToRedo.add(struct);
         }
       });
       itemsToRedo.forEach((struct) {
-        performedChange = redoItem(transaction, struct, itemsToRedo) != null ||
-            performedChange;
+        performedChange = redoItem(transaction, struct, itemsToRedo, 
+            stackItem.insertions, undoManager.ignoreRemoteMapChanges, undoManager) != null 
+          || performedChange;
       });
       // We want to delete in reverse order so that children are deleted before
       // parents, so we have more information available when items are filtered.
@@ -139,13 +127,7 @@ StackItem? popStackItem(
           performedChange = true;
         }
       }
-      result = stackItem;
-      if (result != null) {
-        undoManager.emit("stack-item-popped", [
-          {"stackItem": result, "type": eventType},
-          undoManager,
-        ]);
-      }
+      undoManager.currStackItem = performedChange ? stackItem : null;
     }
     transaction.changed.forEach((type, subProps) {
       // destroy search marker if necessary
@@ -153,8 +135,19 @@ StackItem? popStackItem(
         type.innerSearchMarker!.length = 0;
       }
     });
+    _tr = transaction;
   }, undoManager);
-  return result;
+
+  final res = undoManager.currStackItem;
+  if (res != null) {
+    final changedParentTypes = _tr.changedParentTypes;
+    undoManager.emit('stack-item-popped', [{ 
+      'stackItem': res, 'type': eventType, 
+      'changedParentTypes': changedParentTypes, 
+      'origin': undoManager }, undoManager]);
+    undoManager.currStackItem = null;
+  }
+  return res;
 }
 
 /**
@@ -167,7 +160,28 @@ StackItem? popStackItem(
  * @property {Set<any>} [UndoManagerOptions.trackedOrigins=new Set([null])]
  */
 
-bool _defaultDeleteFilter(Item _) => true;
+bool _asTrue<T>(T _) => true;
+
+/**
+ * @typedef {Object} UndoManagerOptions
+ * @property {number} [UndoManagerOptions.captureTimeout=500]
+ * @property {function(Transaction):boolean} [UndoManagerOptions.captureTransaction] Do not capture changes of a Transaction if result false.
+ * @property {function(Item):boolean} [UndoManagerOptions.deleteFilter=()=>true] Sometimes
+ * it is necessary to filter what an Undo/Redo operation can delete. If this
+ * filter returns false, the type/item won't be deleted even it is in the
+ * undo/redo scope.
+ * @property {Set<any>} [UndoManagerOptions.trackedOrigins=new Set([null])]
+ * @property {boolean} [ignoreRemoteMapChanges] Experimental. By default, the UndoManager will never overwrite remote changes. Enable this property to enable overwriting remote changes on key-value changes (Y.Map, properties on Y.Xml, etc..).
+ * @property {Doc} [doc] The document that this UndoManager operates on. Only needed if typeScope is empty.
+ */
+
+/**
+ * @typedef {Object} StackItemEvent
+ * @property {StackItem} StackItemEvent.stackItem
+ * @property {any} StackItemEvent.origin
+ * @property {'undo'|'redo'} StackItemEvent.type
+ * @property {Map<AbstractType<YEvent<any>>,Array<YEvent<any>>>} StackItemEvent.changedParentTypes
+ */
 
 /**
  * Fires 'stack-item-added' event when a stack item was added to either the undo- or
@@ -176,89 +190,48 @@ bool _defaultDeleteFilter(Item _) => true;
  * Fires 'stack-item-popped' event when a stack item was popped from either the
  * undo- or the redo-stack. You may restore the saved stack information from `event.stackItem.meta`.
  *
- * @extends {Observable<'stack-item-added'|'stack-item-popped'>}
+ * @extends {ObservableV2<{'stack-item-added':function(StackItemEvent, UndoManager):void, 'stack-item-popped': function(StackItemEvent, UndoManager):void, 'stack-cleared': function({ undoStackCleared: boolean, redoStackCleared: boolean }):void, 'stack-item-updated': function(StackItemEvent, UndoManager):void }>}
  */
 class UndoManager extends Observable {
   /**
-   * @param {AbstractType<any>|List<AbstractType<any>>} typeScope Accepts either a single type, or an array of types
+   * @param {Doc|AbstractType<any>|Array<AbstractType<any>>} typeScope Limits the scope of the UndoManager. If this is set to a ydoc instance, all changes on that ydoc will be undone. If set to a specific type, only changes on that type or its children will be undone. Also accepts an array of types.
    * @param {UndoManagerOptions} options
    */
   UndoManager(
-    List<AbstractType> typeScope, {
-    int captureTimeout = 500,
-    this.deleteFilter = _defaultDeleteFilter,
+    typeScope, {
+    this.captureTimeout = 500,
+    this.captureTransaction = _asTrue,
+    this.deleteFilter = _asTrue,
     Set<dynamic>? trackedOrigins,
-  }) {
-    this.scope = typeScope;
-    this.doc = /** @type {Doc} */ this.scope[0].doc!;
-    this.trackedOrigins =
-        trackedOrigins == null ? {null, this} : {...trackedOrigins, this};
+    this.ignoreRemoteMapChanges = false
+  }):
+    this.trackedOrigins = trackedOrigins ?? {[null]},
+    this.doc = typeScope is List ? (typeScope[0] as AbstractType).doc!:
+      typeScope is Doc ? typeScope: (typeScope as AbstractType).doc! {
 
-    this.doc.on("afterTransaction",
-        /** @param {Transaction} transaction */ (args) {
-      final transaction = args[0] as Transaction;
-      // Only track certain transactions
-      if (!this.scope.any(
-              (type) => transaction.changedParentTypes.containsKey(type)) ||
-          (!this.trackedOrigins.contains(transaction.origin) &&
-              (transaction.origin == null ||
-                  !this
-                          .trackedOrigins
-                          .contains(transaction.origin.runtimeType) &&
-                      !this.trackedOrigins.whereType<TypeMatch>().any(
-                          (tracked) => tracked.isType(transaction.origin))))) {
-        return;
-      }
-      final undoing = this.undoing;
-      final redoing = this.redoing;
-      final stack = undoing ? this.redoStack : this.undoStack;
-      if (undoing) {
-        this.stopCapturing(); // next undo should not be appended to last stack item
-      } else if (!redoing) {
-        // neither undoing nor redoing: delete redoStack
-        this.redoStack = [];
-      }
-      final beforeState = transaction.beforeState;
-      final afterState = transaction.afterState;
-      // TODO: is milliseconds?
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (now - this.lastChange < captureTimeout &&
-          stack.length > 0 &&
-          !undoing &&
-          !redoing) {
-        // append change to last stack op
-        final lastOp = stack[stack.length - 1];
-        lastOp.ds = mergeDeleteSets([lastOp.ds, transaction.deleteSet]);
-        lastOp.afterState = afterState;
-      } else {
-        // create a new stack op
-        stack.add(StackItem(transaction.deleteSet, beforeState, afterState));
-      }
-      if (!undoing && !redoing) {
-        this.lastChange = now;
-      }
-      // make sure that deleted structs are not gc'd
-      iterateDeletedStructs(transaction, transaction.deleteSet,
-          /** @param {Item|GC} item */ (item) {
-        if (item is Item && this.scope.any((type) => isParentOf(type, item))) {
-          keepItem(item, true);
-        }
-      });
-      this.emit("stack-item-added", [
-        {
-          "stackItem": stack[stack.length - 1],
-          "origin": transaction.origin,
-          "type": undoing ? "redo" : "undo",
-        },
-        this,
-      ]);
+    this.addToScope(typeScope);
+    this.trackedOrigins.add(this);
+    
+    this.doc.on('afterTransaction', afterTransactionHandler);
+    this.doc.on('destroy', (_) {
+      this.destroy();
     });
   }
 
-  late final List<AbstractType<dynamic>> scope;
+  /**
+   * @type {Array<AbstractType<any> | Doc>}
+   */
+  late final List scope = [];
+
+  late final Doc doc;
+  
+  final bool Function(Item) deleteFilter;
+
   late final Set<dynamic> trackedOrigins;
 
-  final bool Function(Item) deleteFilter;
+  final bool Function(Transaction) captureTransaction;
+
+  
   /**
      * @type {List<StackItem>}
      */
@@ -274,28 +247,133 @@ class UndoManager extends Observable {
      */
   bool undoing = false;
   bool redoing = false;
-  late final Doc doc;
+
+  /**
+   * The currently popped stack item if UndoManager.undoing or UndoManager.redoing
+   *
+   * @type {StackItem|null}
+   */
+  StackItem? currStackItem;
+  
   int lastChange = 0;
 
-  void clear() {
-    this.doc.transact((transaction) {
-      /**
-       * @param {StackItem} stackItem
-       */
-      void clearItem(StackItem stackItem) {
-        iterateDeletedStructs(transaction, stackItem.ds, (item) {
-          if (item is Item &&
-              this.scope.any((type) => isParentOf(type, item))) {
-            keepItem(item, false);
-          }
-        });
-      }
+  final bool ignoreRemoteMapChanges;
 
-      this.undoStack.forEach(clearItem);
-      this.redoStack.forEach(clearItem);
+  final int captureTimeout;
+
+  /**
+   * @param {Transaction} transaction
+   */
+  void afterTransactionHandler(List args) {
+    final transaction = args[0] as Transaction;
+    // Only track certain transactions
+    if (
+      !this.captureTransaction(transaction) ||
+      !this.scope.any((type) => transaction.changedParentTypes.containsKey(/** @type {AbstractType<any>} */ (type)) || type == this.doc) ||
+      (!this.trackedOrigins.contains(transaction.origin) && (transaction.origin == null || !this.trackedOrigins.contains(transaction.origin.runtimeType)))
+    ) {
+      return;
+    }
+    final undoing = this.undoing;
+    final redoing = this.redoing;
+    final stack = undoing ? this.redoStack : this.undoStack;
+    if (undoing) {
+      this.stopCapturing(); // next undo should not be appended to last stack item
+    } else if (!redoing) {
+      // neither undoing nor redoing: delete redoStack
+      this.clear(false, true);
+    }
+    final insertions = DeleteSet();
+    transaction.afterState.forEach((endClock, client) {
+      final startClock = transaction.beforeState[client] ?? 0;
+      final len = endClock - startClock;
+      if (len > 0) {
+        addToDeleteSet(insertions, client, startClock, len);
+      }
     });
-    this.undoStack = [];
-    this.redoStack = [];
+    // TODO: is milliseconds?
+    final now = DateTime.now().millisecondsSinceEpoch;
+    bool didAdd = false;
+    if (this.lastChange > 0 && now - this.lastChange < this.captureTimeout && stack.length > 0 && !undoing && !redoing) {
+      // append change to last stack op
+      final lastOp = stack[stack.length - 1];
+      lastOp.deletions = mergeDeleteSets([lastOp.deletions, transaction.deleteSet]);
+      lastOp.insertions = mergeDeleteSets([lastOp.insertions, insertions]);
+    } else {
+      // create a new stack op
+      stack.add(StackItem(transaction.deleteSet, insertions));
+      didAdd = true;
+    }
+    if (!undoing && !redoing) {
+      this.lastChange = now;
+    }
+    // make sure that deleted structs are not gc'd
+    iterateDeletedStructs(transaction, transaction.deleteSet, /** @param {Item|GC} item */ (item) {
+      if (item is Item && this.scope.any((type) => type == transaction.doc || isParentOf(type, item))) {
+        keepItem(item, true);
+      }
+    });
+    /**
+     * @type {[StackItemEvent, UndoManager]}
+     */
+    final changeEvent = [{ 'stackItem': stack[stack.length - 1], 
+      'origin': transaction.origin, 'type': undoing ? 'redo' : 'undo', 
+      'changedParentTypes': transaction.changedParentTypes }, this];
+    if (didAdd) {
+      this.emit('stack-item-added', changeEvent);
+    } else {
+      this.emit('stack-item-updated', changeEvent);
+    }
+  }
+
+  /**
+   * Extend the scope.
+   *
+   * @param {Array<AbstractType<any> | Doc> | AbstractType<any> | Doc} ytypes
+   */
+  void addToScope(ytypes) {
+    final tmpSet = this.scope.toSet();
+    ytypes = ytypes is List ? ytypes : [ytypes];
+    ytypes.forEach((ytype) {
+      if (!tmpSet.contains(ytype)) {
+        tmpSet.add(ytype);
+        // if (ytype is AbstractType ? ytype.doc != this.doc : ytype != this.doc) 
+        //   logging.warn('[yjs#509] Not same Y.Doc'); // use MultiDocUndoManager instead. also see https://github.com/yjs/yjs/issues/509
+        this.scope.add(ytype);
+      }
+    });
+  }
+
+  /**
+   * @param {any} origin
+   */
+  void addTrackedOrigin(origin) {
+    this.trackedOrigins.add(origin);
+  }
+
+  /**
+   * @param {any} origin
+   */
+  void removeTrackedOrigin(origin) {
+    this.trackedOrigins.remove(origin);
+  }
+
+  void clear([bool clearUndoStack = true, bool clearRedoStack = true]) {
+    if ((clearUndoStack && this.canUndo()) || (clearRedoStack && this.canRedo())) {
+      this.doc.transact((tr) {
+        if (clearUndoStack) {
+          this.undoStack.forEach((item) => clearUndoManagerStackItem(tr, this, item));
+          this.undoStack = [];
+        }
+        if (clearRedoStack) {
+          this.redoStack.forEach((item) => clearUndoManagerStackItem(tr, this, item));
+          this.redoStack = [];
+        }
+        this.emit('stack-cleared', [{ 
+          'undoStackCleared': clearUndoStack, 
+          'redoStackCleared': clearRedoStack }]);
+      });
+    }
   }
 
   /**
@@ -353,79 +431,29 @@ class UndoManager extends Observable {
     }
     return res;
   }
-}
 
-abstract class ValueOrList<V> {
-  const ValueOrList._();
-
-  const factory ValueOrList.list(
-    List<V> list,
-  ) = _List;
-  const factory ValueOrList.value(
-    V value,
-  ) = _Value;
-
-  T when<T>({
-    required T Function(List<V> list) list,
-    required T Function(V value) value,
-  }) {
-    final v = this;
-    if (v is _List<V>) return list(v.list);
-    if (v is _Value<V>) return value(v.value);
-    throw "";
+  /**
+   * Are undo steps available?
+   *
+   * @return {boolean} `true` if undo is possible
+   */
+  bool canUndo () {
+    return this.undoStack.length > 0;
   }
 
-  T? maybeWhen<T>({
-    T Function()? orElse,
-    T Function(List<V> list)? list,
-    T Function(V value)? value,
-  }) {
-    final v = this;
-    if (v is _List<V>) return list != null ? list(v.list) : orElse?.call();
-    if (v is _Value<V>) return value != null ? value(v.value) : orElse?.call();
-    throw "";
+  /**
+   * Are redo steps available?
+   *
+   * @return {boolean} `true` if redo is possible
+   */
+  bool canRedo () {
+    return this.redoStack.length > 0;
   }
 
-  T map<T>({
-    required T Function(_List value) list,
-    required T Function(_Value value) value,
-  }) {
-    final v = this;
-    if (v is _List<V>) return list(v);
-    if (v is _Value<V>) return value(v);
-    throw "";
+  @override
+  void destroy () {
+    this.trackedOrigins.remove(this);
+    this.doc.off('afterTransaction', this.afterTransactionHandler);
+    super.destroy();
   }
-
-  T? maybeMap<T>({
-    T Function()? orElse,
-    T Function(_List value)? list,
-    T Function(_Value value)? value,
-  }) {
-    final v = this;
-    if (v is _List<V>) return list != null ? list(v) : orElse?.call();
-    if (v is _Value<V>) return value != null ? value(v) : orElse?.call();
-    throw "";
-  }
-}
-
-class _List<V> extends ValueOrList<V> {
-  final List<V> list;
-
-  const _List(
-    this.list,
-  ) : super._();
-}
-
-class _Value<V> extends ValueOrList<V> {
-  final V value;
-
-  const _Value(
-    this.value,
-  ) : super._();
-}
-
-class TypeMatch<T> {
-  const TypeMatch();
-
-  bool isType(dynamic v) => v is T;
 }

@@ -122,6 +122,11 @@ class ContentString implements AbstractContent {
   getRef() {
     return 4;
   }
+
+  @override
+  String toString() {
+    return 'ContentString(str: $str)';
+  }
 }
 
 /**

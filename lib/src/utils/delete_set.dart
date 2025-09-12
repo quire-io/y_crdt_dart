@@ -225,7 +225,8 @@ DeleteSet createDeleteSetFromStructStore(StructStore ss) {
         final clock = struct.id.clock;
         var len = struct.length;
         if (i + 1 < structs.length) {
-          for (var next = structs[i + 1]; i + 1 < structs.length && next.deleted; next = structs[++i + 1]) {
+          for (var next = atX<AbstractStruct>(structs, i + 1); i + 1 < structs.length 
+              && next!.deleted; next = atX<AbstractStruct>(structs, ++i + 1)) {
             len += next.length;
           }
         }

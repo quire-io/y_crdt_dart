@@ -491,7 +491,7 @@ void applyUpdateV2(
   dynamic transactionOrigin, 
   AbstractUpdateDecoder Function(decoding.Decoder decoder)? YDecoder,
 ]) {
-  final _YDecoder = YDecoder ?? UpdateDecoderV2.create;
+  final _YDecoder = YDecoder ?? UpdateDecoderV2.new;
   final decoder = decoding.createDecoder(update);
   readUpdateV2(decoder, ydoc, transactionOrigin, _YDecoder(decoder));
 }

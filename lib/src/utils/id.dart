@@ -26,6 +26,13 @@ class ID {
    * @type {number}
    */
   int clock;
+
+  (int, int) get get => (client, clock);
+
+  @override
+  String toString() {
+    return 'ID(client: $client, clock: $clock)';
+  }
 }
 
 /**

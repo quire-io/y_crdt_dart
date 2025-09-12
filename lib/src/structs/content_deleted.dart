@@ -112,6 +112,11 @@ class ContentDeleted implements AbstractContent {
   getRef() {
     return 1;
   }
+
+  @override
+  String toString() {
+    return 'ContentDeleted(len: $len)';
+  }
 }
 
 /**

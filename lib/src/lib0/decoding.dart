@@ -240,21 +240,27 @@ int peekUint32(Decoder decoder) => rightShift(
  * @return {number} An unsigned integer.length
  */
 int readVarUint(Decoder decoder) {
-  var number = 0;
-  var len = 0;
-  while (true) {
+  var num = 0;
+  var mult = 1;
+  final len = decoder.arr.length;
+  while (decoder.pos < len) {
     final r = decoder.arr[decoder.pos++];
-    number = number | ((r & binary.BITS7) << len);
-    len += 7;
+    // num = num | ((r & binary.BITS7) << len)
+    num = num + (r & binary.BITS7) * mult; // shift $r << (7*#iterations) and add it to num
+    mult *= 128; // next iteration, shift 7 "more" to the left
     if (r < binary.BIT8) {
-      return rightShift(number, 0); // return unsigned number!
+      return num;
     }
-    /* istanbul ignore if */
-    if (len > 35) {
+    /* c8 ignore start */
+    if (num > maxSafeInteger) {
       throw Exception('Integer out of range!');
     }
+    /* c8 ignore stop */
   }
+  throw Exception('Unexpected end of array');
 }
+
+const int maxSafeInteger = (1 << 53) - 1;
 
 /**
  * Read signed integer (32bit) with variable length.

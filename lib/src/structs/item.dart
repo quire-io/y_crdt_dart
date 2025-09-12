@@ -46,6 +46,7 @@ import 'package:y_crdt/src/utils/struct_store.dart';
 import 'package:y_crdt/src/utils/transaction.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
 import 'package:y_crdt/src/utils/update_encoder.dart';
+import 'package:y_crdt/src/utils/undo_manager.dart';
 import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
 
@@ -98,7 +99,7 @@ export 'package:y_crdt/src/structs/content_type.dart' show readContentType;
  * @param {Item|null} item
  * @param {boolean} keep
  */
-void keepItem(item, keep) {
+void keepItem(Item? item, bool keep) {
   while (item != null && item.keep != keep) {
     item.keep = keep;
     item = /** @type {AbstractType<any>} */ (item.parent as AbstractType)
@@ -118,8 +119,7 @@ void keepItem(item, keep) {
  */
 Item splitItem(Transaction transaction, Item leftItem, int diff) {
   // create rightItem
-  final client = leftItem.id.client;
-  final clock = leftItem.id.clock;
+  final (client, clock) = leftItem.id.get;
   final rightItem = Item(
       createID(client, clock + diff),
       leftItem,
@@ -135,17 +135,13 @@ Item splitItem(Transaction transaction, Item leftItem, int diff) {
   if (leftItem.keep) {
     rightItem.keep = true;
   }
-  final leftItemRedone = leftItem.redone;
-  if (leftItemRedone != null) {
-    rightItem.redone =
-        createID(leftItemRedone.client, leftItemRedone.clock + diff);
+  if (leftItem.redone case ID redone) {
+    rightItem.redone = createID(redone.client, redone.clock + diff);
   }
   // update left (do not set leftItem.rightOrigin as it will lead to problems when syncing)
   leftItem.right = rightItem;
   // update right
-  if (rightItem.right != null) {
-    rightItem.right!.left = rightItem;
-  }
+  rightItem.right?.left = rightItem;
   // right is more specific.
   transaction.mergeStructs.add(rightItem);
   // update parent._map
@@ -159,17 +155,28 @@ Item splitItem(Transaction transaction, Item leftItem, int diff) {
 }
 
 /**
+ * @param {Array<StackItem>} stack
+ * @param {ID} id
+ */
+bool isDeletedByUndoStack(List<StackItem> stack, ID id) 
+  => stack.any( /** @param {StackItem} s */ (s) => isDeleted(s.deletions, id));
+
+/**
  * Redoes the effect of this operation.
  *
  * @param {Transaction} transaction The Yjs instance.
  * @param {Item} item
  * @param {Set<Item>} redoitems
+ * @param {DeleteSet} itemsToDelete
+ * @param {boolean} ignoreRemoteMapChanges
+ * @param {import('../utils/UndoManager.js').UndoManager} um
  *
  * @return {Item|null}
  *
  * @private
  */
-Item? redoItem(Transaction transaction, Item item, Set<Item> redoitems) {
+Item? redoItem(Transaction transaction, Item item, Set<Item> redoitems, 
+    [DeleteSet? itemsToDelete, bool? ignoreRemoteMapChanges, UndoManager? um]) {
   final doc = transaction.doc;
   final store = doc.store;
   final ownClientID = doc.clientID;
@@ -187,43 +194,25 @@ Item? redoItem(Transaction transaction, Item item, Set<Item> redoitems) {
    * @type {Item|null}
    */
   Item? right;
+  // make sure that parent is redone
+  if (parentItem != null && parentItem.deleted) {
+    // try to undo parent if it will be undone anyway
+    if (parentItem.redone == null && (!redoitems.contains(parentItem) 
+        || redoItem(transaction, parentItem, redoitems, itemsToDelete, ignoreRemoteMapChanges, um) == null)) {
+      return null;
+    }
+    while (parentItem!.redone != null) {
+      parentItem = getItemCleanStart(transaction, parentItem.redone!);
+    }
+  }
+
+  final parentType = parentItem == null ? /** @type {AbstractType<any>} */ (item.parent) : 
+    /** @type {ContentType} */ (parentItem.content as ContentType).type;
+
   if (item.parentSub == null) {
     // Is an array item. Insert at the old position
     left = item.left;
     right = item;
-  } else {
-    // Is a map item. Insert as current value
-    left = item;
-    while (left!.right != null) {
-      left = left.right;
-      if (left!.id.client != ownClientID) {
-        // It is not possible to redo this item because it conflicts with a
-        // change from another client
-        return null;
-      }
-    }
-    if (left.right != null) {
-      left = /** @type {Item} */ /** @type {AbstractType<any>} */ (item.parent
-              as AbstractType)
-          .innerMap
-          .get(item.parentSub!);
-    }
-    right = null;
-  }
-  // make sure that parent is redone
-  if (parentItem != null &&
-      parentItem.deleted == true &&
-      parentItem.redone == null) {
-    // try to undo parent if it will be undone anyway
-    if (!redoitems.contains(parentItem) ||
-        redoItem(transaction, parentItem, redoitems) == null) {
-      return null;
-    }
-  }
-  if (parentItem != null && parentItem.redone != null) {
-    while (parentItem?.redone != null) {
-      parentItem = getItemCleanStart(transaction, parentItem!.redone!);
-    }
     // find next cloned_redo items
     while (left != null) {
       /**
@@ -231,14 +220,10 @@ Item? redoItem(Transaction transaction, Item item, Set<Item> redoitems) {
        */
       Item? leftTrace = left;
       // trace redone until parent matches
-      while (leftTrace != null &&
-          (leftTrace.parent as AbstractType).innerItem != parentItem) {
-        leftTrace = leftTrace.redone == null
-            ? null
-            : getItemCleanStart(transaction, leftTrace.redone!);
+      while (leftTrace != null && /** @type {AbstractType<any>} */ (leftTrace.parent as AbstractType).innerItem != parentItem) {
+        leftTrace = leftTrace.redone == null ? null : getItemCleanStart(transaction, leftTrace.redone!);
       }
-      if (leftTrace != null &&
-          (leftTrace.parent as AbstractType).innerItem == parentItem) {
+      if (leftTrace != null && /** @type {AbstractType<any>} */ (leftTrace.parent as AbstractType).innerItem == parentItem) {
         left = leftTrace;
         break;
       }
@@ -250,31 +235,45 @@ Item? redoItem(Transaction transaction, Item item, Set<Item> redoitems) {
        */
       Item? rightTrace = right;
       // trace redone until parent matches
-      while (rightTrace != null &&
-          (rightTrace.parent as AbstractType).innerItem != parentItem) {
-        rightTrace = rightTrace.redone == null
-            ? null
-            : getItemCleanStart(transaction, rightTrace.redone!);
+      while (rightTrace != null && /** @type {AbstractType<any>} */ (rightTrace.parent as AbstractType).innerItem != parentItem) {
+        rightTrace = rightTrace.redone == null ? null : getItemCleanStart(transaction, rightTrace.redone!);
       }
-      if (rightTrace != null &&
-          (rightTrace.parent as AbstractType).innerItem == parentItem) {
+      if (rightTrace != null && /** @type {AbstractType<any>} */ (rightTrace.parent as AbstractType).innerItem == parentItem) {
         right = rightTrace;
         break;
       }
       right = right.right;
+    }
+  } else {
+    right = null;
+    if (item.right != null && !(ignoreRemoteMapChanges ?? false)) {
+      left = item;
+      // Iterate right while right is in itemsToDelete
+      // If it is intended to delete right while item is redone, we can expect that item should replace right.
+      while (left != null && left.right != null && (left.right!.redone != null 
+          || isDeleted(itemsToDelete!, left.right!.id) 
+          || isDeletedByUndoStack(um!.undoStack, left.right!.id) 
+          || isDeletedByUndoStack(um.redoStack, left.right!.id))) {
+        left = left.right;
+        // follow redone
+        while (left!.redone != null) left = getItemCleanStart(transaction, left.redone!);
+      }
+      if (left != null && left.right != null) {
+        // It is not possible to redo this item because it conflicts with a
+        // change from another client
+        return null;
+      }
+    } else {
+      left = (parentType as AbstractType).innerMap.get(item.parentSub!) ?? null;
     }
   }
   final nextClock = getState(store, ownClientID);
   final nextId = createID(ownClientID, nextClock);
   final redoneItem = Item(
       nextId,
-      left,
-      left?.lastId,
-      right,
-      right?.id,
-      parentItem == null
-          ? item.parent
-          : /** @type {ContentType} */ (parentItem.content as ContentType).type,
+      left, left?.lastId,
+      right, right?.id,
+      parentType,
       item.parentSub,
       item.content.copy());
   item.redone = nextId;
@@ -442,27 +441,25 @@ class Item extends AbstractStruct {
       this.right = getItemCleanStart(transaction, _rightOrigin);
       this.rightOrigin = this.right!.id;
     }
-    // only set parent if this shouldn't be garbage collected
-    if (_parent == null) {
-      final _left = this.left;
-      if (_left is Item) {
-        this.parent = _left.parent;
-        this.parentSub = _left.parentSub;
-      }
-      final _right = this.right;
-      if (_right is Item) {
-        this.parent = _right.parent;
-        this.parentSub = _right.parentSub;
+    
+    if (this.left is GC || this.right is GC) {
+      this.parent = null;
+    } else if (_parent == null) {
+      // only set parent if this shouldn't be garbage collected
+      if (this.left case Item left) {
+        this.parent = left.parent;
+        this.parentSub = left.parentSub;
+      } else if (this.right case Item right) {
+        this.parent = right.parent;
+        this.parentSub = right.parentSub;
       }
     } else if (_parent is ID) {
       final parentItem = getItem(store, _parent);
       //https://github.com/yjs/yjs/commit/6dd26d3b483cfa1c715b34eecda8767fff1c8936#diff-8e03df4677fec8fdd3103498dd8f3114030b2d18bca59ac692a122795103ab82R328-R368
       if (parentItem is GC) {
         this.parent = null;
-      } else if (parentItem is Item && parentItem.content is ContentType) {
-        this.parent = (parentItem.content as ContentType).type;
       } else {
-        this.parent = null;
+        this.parent = ((parentItem as Item).content as ContentType).type;
       }
     }
     return null;
@@ -557,11 +554,10 @@ class Item extends AbstractStruct {
         this.left = left;
       }
       // reconnect left/right + update parent map/start if necessary
-      final _left = this.left;
-      if (_left != null) {
-        final right = _left.right;
+      if (this.left case Item left) {
+        final right = left.right;
         this.right = right;
-        _left.right = this;
+        left.right = this;
       } else {
         Item? r;
         if (this.parentSub != null) {
@@ -599,14 +595,12 @@ class Item extends AbstractStruct {
       addStruct(transaction.doc.store, this);
       this.content.integrate(transaction, this);
       // add parent to transaction.changed
-      final _parent = this.parent;
-      if (_parent is AbstractType<YEvent>) {
-        addChangedTypeToTransaction(transaction, _parent, this.parentSub);
-        if ((_parent.innerItem != null && _parent.innerItem!.deleted) ||
-            (this.parentSub != null && this.right != null)) {
-          // delete if parent is deleted or if this is not the current attribute value of parent
-          this.delete(transaction);
-        }
+      final _parent = this.parent as AbstractType<YEvent>;
+      addChangedTypeToTransaction(transaction, _parent, this.parentSub);
+      if ((_parent.innerItem != null && _parent.innerItem!.deleted) ||
+          (this.parentSub != null && this.right != null)) {
+        // delete if parent is deleted or if this is not the current attribute value of parent
+        this.delete(transaction);
       }
     } else {
       // parent is not defined. Integrate GC struct instead
@@ -667,6 +661,21 @@ class Item extends AbstractStruct {
         right.redone == null &&
         this.content.runtimeType == right.content.runtimeType &&
         this.content.mergeWith(right.content)) {
+
+      final searchMarker = /** @type {AbstractType<any>} */ (this.parent as AbstractType).innerSearchMarker;
+      if (searchMarker != null) {
+        searchMarker.forEach((marker) {
+          if (marker.p == right) {
+            // right is going to be "forgotten" so we need to update the marker
+            marker.p = this;
+            // adjust marker index
+            if (!this.deleted && this.countable) {
+              marker.index -= this.length;
+            }
+          }
+        });
+      }
+
       if (right.keep) {
         this.keep = true;
       }
@@ -750,24 +759,45 @@ class Item extends AbstractStruct {
       encoder.writeRightID(rightOrigin);
     }
     if (origin == null && rightOrigin == null) {
-      final parent =
-          /** @type {AbstractType<any>} */ this.parent as AbstractType;
-      final parentItem = parent.innerItem;
-      if (parentItem == null) {
-        // parent type on y._map
-        // find the correct key
-        final ykey = findRootTypeKey(parent);
+      final parent = /** @type {AbstractType<any>} */ this.parent;
+      // if (parent._item !== undefined) {//null is true here
+      // if (parent is AbstractType && parent.innerItem != null) {
+      if (parent is AbstractType) {
+        final parentItem = parent.innerItem;
+        if (parentItem == null) {
+          // parent type on y._map
+          // find the correct key
+          final ykey = findRootTypeKey(parent);
+          encoder.writeParentInfo(true); // write parentYKey
+          encoder.writeString(ykey);
+        } else {
+          encoder.writeParentInfo(false); // write parent id
+          encoder.writeLeftID(parentItem.id);
+        }
+      } else if (parent is String) { // this edge case was added by differential updates
         encoder.writeParentInfo(true); // write parentYKey
-        encoder.writeString(ykey);
-      } else {
+        encoder.writeString(parent);
+      } else if (parent is ID) {
         encoder.writeParentInfo(false); // write parent id
-        encoder.writeLeftID(parentItem.id);
+        encoder.writeLeftID(parent);
+      } else {
+        throw Exception('Unexpected case');
       }
       if (parentSub != null) {
         encoder.writeString(parentSub);
       }
     }
     this.content.write(encoder, offset);
+  }
+
+  @override
+  String toString() {
+    return 'Item(id: $id, '
+      'length: $length, origin: $origin, rightOrigin: $rightOrigin, '
+      'left: ${left}, right: ${right}, info: $info, '
+      'parent: $parent, parentSub: $parentSub, '
+      'content: $content, deleted: $deleted, '
+      'redone: $redone, keep: $keep, countable: $countable)';
   }
 }
 
@@ -795,7 +825,10 @@ final contentRefs = [
   readContentFormat, // 6
   readContentType, // 7
   readContentAny, // 8
-  readContentDoc // 9
+  readContentDoc, // 9
+  () {
+    throw Exception('Unexpected case');
+  }, // 10 - Skip is not ItemContent
 ];
 
 /**

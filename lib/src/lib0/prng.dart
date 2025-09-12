@@ -48,6 +48,7 @@ Random create(int seed) => Random(seed);
 //  * @return {Boolean} A random boolean
 //  */
 // void bool = (Random gen) => gen.next() >= 0.5;
+bool randomBool(Random gen) => gen.nextDouble() >= 0.5;
 
 // /**
 //  * Generates a random integer with 53 bit resolution.

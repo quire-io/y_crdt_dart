@@ -330,7 +330,7 @@ class AbstractType<EventType> {
      * Deep event handlers
      * @type {EventHandler<List<YEvent>,Transaction>}
      */
-  final EventHandler<List<YEvent>, Transaction> innerdEH = createEventHandler();
+  final EventHandler<List<YEvent>, Transaction> innerDEH = createEventHandler();
   /**
      * @type {null | List<ArraySearchMarker>}
      */
@@ -418,7 +418,7 @@ class AbstractType<EventType> {
    * @param {function(List<YEvent>,Transaction):void} f Observer function
    */
   void observeDeep(void Function(List<YEvent>, Transaction) f) {
-    addEventHandlerListener(this.innerdEH, f);
+    addEventHandlerListener(this.innerDEH, f);
   }
 
   /**
@@ -436,7 +436,7 @@ class AbstractType<EventType> {
    * @param {function(List<YEvent>,Transaction):void} f Observer function
    */
   void unobserveDeep(void Function(List<YEvent>, Transaction) f) {
-    removeEventHandlerListener(this.innerdEH, f);
+    removeEventHandlerListener(this.innerDEH, f);
   }
 
   /**

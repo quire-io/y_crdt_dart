@@ -36,7 +36,7 @@ import 'package:y_crdt/src/utils/update_encoder.dart';
 import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
 
-const maxSearchMarker = 80;
+final maxSearchMarker = 80;
 
 /**
  * A unique timestamp that identifies each marker.
@@ -960,7 +960,7 @@ dynamic typeMapGet(AbstractType parent, String key) {
  * @private
  * @function
  */
-dynamic typeMapGetAll(AbstractType parent) {
+Map<String, dynamic> typeMapGetAll(AbstractType parent) {
   /**
    * @type {Object<string,any>}
    */
@@ -1005,6 +1005,34 @@ dynamic typeMapGetSnapshot(AbstractType parent, String key, Snapshot snapshot) {
   return v != null && isVisible(v, snapshot)
       ? v.content.getContent()[v.length - 1]
       : null;
+}
+
+/**
+ * @param {AbstractType<any>} parent
+ * @param {Snapshot} snapshot
+ * @return {Object<string,Object<string,any>|number|null|Array<any>|string|Uint8Array|AbstractType<any>|undefined>}
+ *
+ * @private
+ * @function
+ */
+Map<String, dynamic> typeMapGetAllSnapshot(AbstractType parent, Snapshot snapshot) {
+  /**
+   * @type {Object<string,any>}
+   */
+  final res = <String, dynamic>{};
+  parent.innerMap.forEach((key, value) {
+    /**
+     * @type {Item|null}
+     */
+    Item? v = value;
+    while (v != null && (!snapshot.sv.containsKey(v.id.client) || v.id.clock >= (snapshot.sv[v.id.client] ?? 0))) {
+      v = v.left;
+    }
+    if (v != null && isVisible(v, snapshot)) {
+      res[key] = v.content.getContent()[v.length - 1];
+    }
+  });
+  return res;
 }
 
 /**

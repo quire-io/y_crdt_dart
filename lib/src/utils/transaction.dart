@@ -418,11 +418,14 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
         });
         subdocsRemoved.forEach((subdoc) => doc.subdocs.remove(subdoc));
         doc.emit('subdocs', [
-          { 
-            'loaded': subdocsLoaded, 
-            'added': subdocsAdded, 
-            'removed': subdocsRemoved 
-          }, doc, transaction]);
+          toSubdocsEventData(
+            subdocsLoaded: subdocsLoaded,
+            subdocsAdded: subdocsAdded,
+            subdocsRemoved: subdocsRemoved,
+          ),
+          doc,
+          transaction,
+        ]);
         subdocsRemoved.forEach((subdoc) => subdoc.destroy());
       }
 

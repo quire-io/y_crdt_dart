@@ -8,6 +8,7 @@
 // } from "../internals.js";
 
 import 'package:y_crdt/src/structs/item.dart';
+import 'package:y_crdt/src/utils/doc.dart';
 import 'package:y_crdt/src/utils/delete_set.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
 
@@ -17,6 +18,8 @@ class ContentDeleted implements AbstractContent {
    */
   ContentDeleted(this.len);
   int len;
+
+  Doc? doc;
 
   /**
    * @return {number}

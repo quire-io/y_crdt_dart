@@ -20,20 +20,20 @@ class Observable<N> {
    * @param {function} f
    */
   void on(N name, void Function(List<dynamic>) f) {
-    this.innerObservers.putIfAbsent(name, () => {}).add(f);
+    this.innerObservers.putIfAbsent(name, Set.new).add(f);
   }
 
   /**
    * @param {N} name
    * @param {function} f
    */
-  void once(N name, void Function() f) {
+  void once(N name, void Function(List<dynamic>) f) {
     /**
      * @param  {...any} args
      */
     void _f(List<dynamic> args) {
       this.off(name, _f);
-      f();
+      f(args);
     }
 
     this.on(name, _f);

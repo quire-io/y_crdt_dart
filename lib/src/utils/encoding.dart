@@ -507,7 +507,7 @@ void applyUpdateV2(
  *
  * @function
  */
-void applyUpdate(Doc ydoc, Uint8List update, dynamic transactionOrigin) =>
+void applyUpdate(Doc ydoc, Uint8List update, [dynamic transactionOrigin]) =>
     applyUpdateV2(ydoc, update, transactionOrigin, UpdateDecoderV1.new);
 
 /**
@@ -584,7 +584,7 @@ Uint8List encodeStateAsUpdateV2(
  *
  * @function
  */
-Uint8List encodeStateAsUpdate(Doc doc, Uint8List? encodedTargetStateVector) =>
+Uint8List encodeStateAsUpdate(Doc doc, [Uint8List? encodedTargetStateVector]) =>
     encodeStateAsUpdateV2(
         doc, encodedTargetStateVector, UpdateEncoderV1());
 

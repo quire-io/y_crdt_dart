@@ -59,11 +59,11 @@ class YMap<T> extends AbstractType<YMapEvent<T>> {
    *
    * @param {Iterable<readonly [string, any]>=} entries - an optional iterable to initialize the YMap
    */
-  YMap([Iterable<MapEntry<String, T>>? _prelimContent]) {
-    if (_prelimContent == null) {
+  YMap([Iterable<MapEntry<String, T>>? entries]) {
+    if (entries == null) {
       this._prelimContent = {};
     } else {
-      this._prelimContent = Map.fromEntries(_prelimContent);
+      this._prelimContent = Map.fromEntries(entries);
     }
   }
 
@@ -260,6 +260,22 @@ class YMap<T> extends AbstractType<YMapEvent<T>> {
    */
   bool has(String key) {
     return typeMapHas(this, key);
+  }
+
+  /**
+   * Removes all elements from this YMap.
+   */
+  void clear () {
+    final doc = this.doc;
+    if (doc != null) {
+      transact(doc, (transaction) {
+        this.forEach((value, key, map) {
+          typeMapDelete(transaction, map, key);
+        });
+      });
+    } else {
+      /** @type {Map<string, any>} */ (this._prelimContent)?.clear();
+    }
   }
 
   /**

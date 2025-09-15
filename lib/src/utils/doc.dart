@@ -3,9 +3,11 @@ import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
 import 'package:y_crdt/src/structs/content_doc.dart';
+import 'package:y_crdt/src/structs/content_deleted.dart';
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/types/abstract_type.dart';
 import 'package:y_crdt/src/types/y_array.dart';
+import 'package:y_crdt/src/types/y_xml_fragment.dart';
 import 'package:y_crdt/src/types/y_map.dart';
 import 'package:y_crdt/src/types/y_text.dart';
 import 'package:y_crdt/src/utils/observable.dart';
@@ -322,17 +324,20 @@ class Doc extends Observable<String> {
    *
    * @public
    */
-  // TODO
-  // YXmlFragment getXmlFragment([String name = ""]) {
-  //   // @ts-ignore
-  //   return this.get(name, YXmlFragment.create) as YXmlFragment;
-  // }
+  YXmlFragment getXmlFragment([String name = ""]) {
+    // @ts-ignore
+    return this.get(name, YXmlFragment.new);
+  }
 
   /**
    * Converts the entire document into a js object, recursively traversing each yjs type
+   * Doesn't log types that have not been defined (using ydoc.getType(..)).
+   *
+   * @deprecated Do not use this method and rather call toJSON directly on the shared types.
    *
    * @return {Object<string, any>}
    */
+  @Deprecated('Do not use this method and rather call toJSON directly on the shared types.')
   Map<String, dynamic> toJSON() {
     /**
      * @type {Object<string, any>}
@@ -357,19 +362,27 @@ class Doc extends Observable<String> {
     final item = this.item;
     if (item != null) {
       this.item = null;
-      final content = item.content as ContentDoc;
-      content.doc = Doc(
-        guid: this.guid,
-        gc: content.opts.gc ?? true, 
-        autoLoad: content.opts.autoLoad ?? false,
-        meta: content.opts.meta,
-        shouldLoad: false
-      );
-      content.doc!.item = item;
+      late Doc doc;
+      
+      if (item.content case ContentDeleted content) {
+        content.doc = doc = Doc( guid: this.guid, 
+          shouldLoad: false);
+      } else {
+        final content = item.content as ContentDoc;
+        content.doc = doc = Doc(
+          guid: this.guid,
+          gc: content.opts.gc ?? true, 
+          autoLoad: content.opts.autoLoad ?? false,
+          meta: content.opts.meta,
+          shouldLoad: false
+        );
+      }
+      
+      doc.item = item;
       globalTransact(
           /** @type {any} */ (item.parent as AbstractType).doc!, (transaction) {
         if (!item.deleted) {
-          transaction.subdocsAdded.add(content.doc!);
+          transaction.subdocsAdded.add(doc);
         }
         transaction.subdocsRemoved.add(this);
       }, null, true);
@@ -378,4 +391,30 @@ class Doc extends Observable<String> {
     this.emit("destroy", [this]);
     super.destroy();
   }
+
+  @override
+  String toString() {
+    return 'Doc(guid: $guid)';
+  }
+}
+
+Map<String, dynamic> toSubdocsEventData({
+    required Set<Doc> subdocsLoaded,
+    required Set<Doc> subdocsRemoved, 
+    required Set<Doc> subdocsAdded}) {
+  return {
+    'loaded': subdocsLoaded, 
+    'added': subdocsAdded, 
+    'removed': subdocsRemoved 
+  };
+}
+
+({Set<Doc> loaded, Set<Doc> added, Set<Doc> removed}) fromSubdocsEventData(List args) {
+  final data = args[0] as Map<String, dynamic>;
+  return (
+    loaded: (data['loaded'] as Set<Doc>?) ?? <Doc>{}, 
+    added: (data['added'] as Set<Doc>?) ?? <Doc>{}, 
+    removed: (data['removed'] as Set<Doc>?) ?? <Doc>{}
+  );
+
 }

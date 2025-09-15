@@ -29,6 +29,10 @@ export 'package:y_crdt/src/types/abstract_type.dart'
 export 'package:y_crdt/src/types/y_array.dart' show YArray, YArrayEvent;
 export 'package:y_crdt/src/types/y_map.dart' show YMap, YMapEvent;
 export 'package:y_crdt/src/types/y_text.dart' show YText, YTextEvent;
+export 'package:y_crdt/src/types/y_xml_fragment.dart' show YXmlFragment;
+export 'package:y_crdt/src/types/y_xml_text.dart' show YXmlText;
+export 'package:y_crdt/src/types/y_xml_element.dart' show YXmlElement;
+export 'package:y_crdt/src/types/y_xml_event.dart' show YXmlEvent;
 export 'package:y_crdt/src/utils/abstract_connector.dart'
     show AbstractConnector;
 export 'package:y_crdt/src/utils/delete_set.dart'

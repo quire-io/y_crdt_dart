@@ -17,6 +17,18 @@ class Opts {
   bool? gc;
   bool? autoLoad, shouldLoad;
   dynamic meta;
+  bool Function(Item)? gcFilter;
+
+  Opts();
+
+  factory Opts.fromMap(Map map) {
+    return Opts()
+      ..gc = map["gc"] as bool?
+      ..shouldLoad = map["shouldLoad"] as bool?
+      ..autoLoad = map["autoLoad"] as bool?
+      ..meta = map["meta"]
+      ..gcFilter = map["gcFilter"] as bool Function(Item)?;
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -24,6 +36,7 @@ class Opts {
       "autoLoad": autoLoad,
       "meta": meta,
       "shouldLoad": shouldLoad,
+      "gcFilter": gcFilter,
     };
   }
 }
@@ -33,9 +46,12 @@ class Opts {
  * @param {Object<string, any>} opts
  */
 Doc createDocFromOpts(String guid, Opts opts) 
-  => Doc(guid: guid, gc: opts.gc ?? true, 
-      autoLoad: opts.autoLoad ?? false, meta: opts.meta,
-      shouldLoad: (opts.shouldLoad ?? false) || (opts.autoLoad ?? false) || false );
+  => Doc(guid: guid, 
+      autoLoad: opts.autoLoad ?? false, 
+      shouldLoad: (opts.shouldLoad ?? false) || (opts.autoLoad ?? false) || false,
+      gc: opts.gc ?? true, 
+      meta: opts.meta,
+      gcFilter: opts.gcFilter ?? Doc.defaultGcFilter);
 
 /**
  * @private
@@ -183,17 +199,5 @@ class ContentDoc implements AbstractContent {
  * @return {ContentDoc}
  */
 ContentDoc readContentDoc(AbstractUpdateDecoder decoder) {
-  final guid = decoder.readString();
-  final params = decoder.readAny();
-  // return ContentDoc(createDocFromOpts(decoder.readString(), decoder.readAny()));
-  return ContentDoc(
-    Doc(
-      guid: guid,
-      autoLoad: params["autoLoad"] as bool? ?? false,
-      gc: params["gc"] as bool? ?? true,
-      gcFilter:
-          (params["gcFilter"] ?? Doc.defaultGcFilter) as bool Function(Item),
-      meta: params["meta"],
-    ),
-  );
+  return ContentDoc(createDocFromOpts(decoder.readString(), Opts.fromMap(decoder.readAny())));
 }

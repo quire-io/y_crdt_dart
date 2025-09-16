@@ -21,6 +21,10 @@ import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/types/abstract_type.dart';
 import 'package:y_crdt/src/types/y_array.dart' show readYArray;
 import 'package:y_crdt/src/types/y_map.dart';
+import 'package:y_crdt/src/types/y_xml_element.dart';
+import 'package:y_crdt/src/types/y_xml_fragment.dart';
+import 'package:y_crdt/src/types/y_xml_hook.dart';
+import 'package:y_crdt/src/types/y_xml_text.dart';
 import 'package:y_crdt/src/types/y_text.dart';
 import 'package:y_crdt/src/utils/update_decoder.dart';
 
@@ -32,10 +36,10 @@ const List<AbstractType Function(AbstractUpdateDecoder)> typeRefs = [
   readYArray,
   readYMap,
   readYText,
-  // readYXmlElement,
-  // readYXmlFragment,
-  // readYXmlHook,
-  // readYXmlText,
+  readYXmlElement,
+  readYXmlFragment,
+  readYXmlHook,
+  readYXmlText,
 ];
 
 const YArrayRefID = 0;

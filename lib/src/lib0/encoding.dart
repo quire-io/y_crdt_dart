@@ -42,6 +42,11 @@ class Encoder {
      * @type {Array<Uint8Array>}
      */
   final List<Uint8List> bufs = [];
+
+  @override
+  String toString() {
+    return 'Encoder(cpos: $cpos, cbuf: $cbuf, bufs: $bufs)';
+  }
 }
 
 /**
@@ -248,7 +253,7 @@ void setUint32(Encoder encoder, int pos, int number) {
 void writeVarUint(Encoder encoder, int number) {
   while (number > binary.BITS7) {
     write(encoder, binary.BIT8 | (binary.BITS7 & number));
-    number = rightShift(number, 7);
+    number = (number / 128).floor(); // shift >>> 7
   }
   write(encoder, binary.BITS7 & number);
 }
@@ -267,24 +272,27 @@ void writeVarUint(Encoder encoder, int number) {
  * @param {Encoder} encoder
  * @param {number} num The number that is to be encoded.
  */
-void writeVarInt(Encoder encoder, int number) {
-  final isNegative = isNegativeZero(number);
+void writeVarInt(Encoder encoder, num _number) {
+  final isNegative = isNegativeZero(_number);
   if (isNegative) {
-    number = -number;
+    _number = -_number;
   }
+  var number = _number.toInt();
+
   //             |- whether to continue reading         |- whether is negative     |- number
   write(
       encoder,
       (number > binary.BITS6 ? binary.BIT8 : 0) |
           (isNegative ? binary.BIT7 : 0) |
           (binary.BITS6 & number));
-  number = rightShift(number, 6);
+  number = (number / 64).floor(); // shift >>> 6
+
   // We don't need to consider the case of num === 0 so we can use a different
   // pattern here than above.
   while (number > 0) {
     write(encoder,
         (number > binary.BITS7 ? binary.BIT8 : 0) | (binary.BITS7 & number));
-    number = rightShift(number, 7);
+    number = (number / 128).floor(); // shift >>> 7
   }
 }
 
@@ -571,6 +579,14 @@ class RleEncoder<T> extends Encoder {
       this.s = v;
     }
   }
+
+  @override
+  String toString() {
+    return 'RleEncoder('
+    '\tcount: $count,\n'
+    '\ts: $s,\n'
+    '\tw: $w,)\n';
+  }
 }
 
 /**
@@ -647,7 +663,7 @@ void flushUintOptRleEncoder(UintOptRleEncoder encoder) {
     // flush counter, unless this is the first value (count = 0)
     // case 1: just a single value. set sign to positive
     // case 2: write several values. set sign to negative to indicate that there is a length coming
-    writeVarInt(encoder.encoder, encoder.count == 1 ? encoder.s : -encoder.s);
+    writeVarInt(encoder.encoder, encoder.count == 1 ? encoder.s : -1.0 * encoder.s);//need -0
     if (encoder.count > 1) {
       writeVarUint(
           encoder.encoder,
@@ -691,6 +707,13 @@ class UintOptRleEncoder {
     flushUintOptRleEncoder(this);
     return _toUint8Array(this.encoder);
   }
+
+  @override
+  String toString() {
+    return 'UintOptRleEncoder('
+    '\tencoder: $encoder,\n'
+    '\ts: $s, count: $count)\n';
+  }
 }
 
 /**
@@ -731,6 +754,13 @@ class IncUintOptRleEncoder implements UintOptRleEncoder {
   Uint8List toUint8Array() {
     flushUintOptRleEncoder(this);
     return _toUint8Array(this.encoder);
+  }
+
+  @override
+  String toString() {
+    return 'IncUintOptRleEncoder('
+    '\tencoder: $encoder,\n'
+    '\ts: $s, count: $count)\n';
   }
 }
 
@@ -799,6 +829,13 @@ class IntDiffOptRleEncoder {
   Uint8List toUint8Array() {
     flushIntDiffOptRleEncoder(this);
     return _toUint8Array(this.encoder);
+  }
+
+  @override
+  String toString() {
+    return 'IntDiffOptRleEncoder('
+    '\tencoder: $encoder,\n'
+    '\ts: $s, count: $count, diff: $diff)\n';
   }
 }
 

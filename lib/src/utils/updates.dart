@@ -237,9 +237,9 @@ Uint8List mergeUpdates(Iterable<Uint8List> updates) => mergeUpdatesV2(
  * @param {typeof UpdateDecoderV1 | typeof UpdateDecoderV2} YDecoder
  * @return {Uint8Array}
  */
-Uint8List encodeStateVectorFromUpdateV2(Uint8List update, 
+Uint8List encodeStateVectorFromUpdateV2(Uint8List update, [
     AbstractDSEncoder YEncoder()?,
-    AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?,) {
+    AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?,]) {
   YDecoder ??= UpdateDecoderV2.new;
   YEncoder ??= UpdateEncoderV2.new;
 
@@ -295,7 +295,7 @@ Uint8List encodeStateVectorFromUpdateV2(Uint8List update,
  * @return {Uint8Array}
  */
 Uint8List encodeStateVectorFromUpdate (Uint8List update) 
-  => encodeStateVectorFromUpdateV2(update, DSEncoderV1.create, UpdateDecoderV1.new);
+  => encodeStateVectorFromUpdateV2(update, DSEncoderV1.new, UpdateDecoderV1.new);
 
 /**
  * @param {Uint8Array} update
@@ -303,7 +303,7 @@ Uint8List encodeStateVectorFromUpdate (Uint8List update)
  * @return {{ from: Map<number,number>, to: Map<number,number> }}
  */
 (Map<int, int>, Map<int, int>) parseUpdateMetaV2(Uint8List update, 
-    AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?) {
+    [AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?]) {
   YDecoder ??= UpdateDecoderV2.new;
   /**
    * @type {Map<number, number>}
@@ -771,13 +771,13 @@ _ObfuscatorFunction createObfuscator(ObfuscatorOptions? options) {
  * @param {Uint8Array} update
  * @param {ObfuscatorOptions} [opts]
  */
-Uint8List obfuscateUpdate(Uint8List update, ObfuscatorOptions opts) => convertUpdateFormat(update, createObfuscator(opts), UpdateDecoderV1.new, UpdateEncoderV1.new);
+Uint8List obfuscateUpdate(Uint8List update, [ObfuscatorOptions? opts]) => convertUpdateFormat(update, createObfuscator(opts), UpdateDecoderV1.new, UpdateEncoderV1.new);
 
 /**
  * @param {Uint8Array} update
  * @param {ObfuscatorOptions} [opts]
  */
-Uint8List obfuscateUpdateV2(Uint8List update, ObfuscatorOptions opts) => convertUpdateFormat(update, createObfuscator(opts), UpdateDecoderV2.new, UpdateEncoderV2.new);
+Uint8List obfuscateUpdateV2(Uint8List update, [ObfuscatorOptions? opts]) => convertUpdateFormat(update, createObfuscator(opts), UpdateDecoderV2.new, UpdateEncoderV2.new);
 
 /**
  * @param {Uint8Array} update

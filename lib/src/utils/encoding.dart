@@ -304,8 +304,8 @@ PendingStructs? integrateStructs(Transaction transaction, StructStore store, Map
         updateMissingSv(stackHead.id.client, stackHead.id.clock - 1);
         // hid a dead wall, add all items from stack to restSS
         addStackToRestSS();
-      } else if (stackHead is Item) {
-        final missing = stackHead.getMissing(transaction, store);
+      } else {
+        final missing = (stackHead as Item).getMissing(transaction, store);
         if (missing != null) {
           stack.add(stackHead);
           // get the struct reader that has the missing struct
@@ -539,11 +539,9 @@ void writeStateAsUpdate(AbstractUpdateEncoder encoder, Doc doc,
  *
  * @function
  */
-Uint8List encodeStateAsUpdateV2(
-  Doc doc,
-  Uint8List? encodedTargetStateVector, [
-  AbstractUpdateEncoder? encoder,
-]) {
+Uint8List encodeStateAsUpdateV2(Doc doc,[
+    Uint8List? encodedTargetStateVector,
+    AbstractUpdateEncoder? encoder]) {
   encodedTargetStateVector ??= Uint8List.fromList([0]);
   encoder ??= UpdateEncoderV2();
 

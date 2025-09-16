@@ -6,7 +6,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:y_crdt/src/lib0/decoding.dart';
 import 'package:y_crdt/src/lib0/decoding.dart' as decoding;
 import 'package:y_crdt/src/utils/id.dart';
 
@@ -33,7 +32,7 @@ abstract class AbstractDSDecoder {
 }
 
 abstract class AbstractUpdateDecoder extends AbstractDSDecoder {
-  AbstractUpdateDecoder(Decoder decoder) : super(decoder);
+  AbstractUpdateDecoder(decoding.Decoder decoder) : super(decoder);
 
   /**
    * @return {ID}
@@ -249,7 +248,6 @@ class DSDecoderV2 implements AbstractDSDecoder {
   int dsCurrVal = 0;
   @override
   final decoding.Decoder restDecoder;
-  static DSDecoderV2 create(decoding.Decoder decoder) => DSDecoderV2(decoder);
 
   @override
   void resetDsCurVal() {
@@ -274,7 +272,7 @@ class UpdateDecoderV2 extends DSDecoderV2 implements AbstractUpdateDecoder {
   /**
    * @param {decoding.Decoder} decoder
    */
-  UpdateDecoderV2(Decoder decoder) : super(decoder) {
+  UpdateDecoderV2(decoding.Decoder decoder) : super(decoder) {
     decoding.readVarUint(decoder); // read feature flag - currently unused
     this.keyClockDecoder = decoding.IntDiffOptRleDecoder(decoding.readVarUint8Array(decoder));
     this.clientDecoder = decoding.UintOptRleDecoder(decoding.readVarUint8Array(decoder));
@@ -293,15 +291,15 @@ class UpdateDecoderV2 extends DSDecoderV2 implements AbstractUpdateDecoder {
      * @type {List<string>}
      */
   final keys = <String>[];
-  late final IntDiffOptRleDecoder keyClockDecoder;
-  late final UintOptRleDecoder clientDecoder;
-  late final IntDiffOptRleDecoder leftClockDecoder;
-  late final IntDiffOptRleDecoder rightClockDecoder;
-  late final RleDecoder infoDecoder;
-  late final StringDecoder stringDecoder;
-  late final RleDecoder parentInfoDecoder;
-  late final UintOptRleDecoder typeRefDecoder;
-  late final UintOptRleDecoder lenDecoder;
+  late final decoding.IntDiffOptRleDecoder keyClockDecoder;
+  late final decoding.UintOptRleDecoder clientDecoder;
+  late final decoding.IntDiffOptRleDecoder leftClockDecoder;
+  late final decoding.IntDiffOptRleDecoder rightClockDecoder;
+  late final decoding.RleDecoder infoDecoder;
+  late final decoding.StringDecoder stringDecoder;
+  late final decoding.RleDecoder parentInfoDecoder;
+  late final decoding.UintOptRleDecoder typeRefDecoder;
+  late final decoding.UintOptRleDecoder lenDecoder;
 
   /**
    * @return {ID}
@@ -324,7 +322,7 @@ class UpdateDecoderV2 extends DSDecoderV2 implements AbstractUpdateDecoder {
    * Use this in favor of readID whenever possible to reduce the number of objects created.
    */
   @override
-  readClient() {
+  int readClient() {
     return this.clientDecoder.read();
   }
 
@@ -411,5 +409,21 @@ class UpdateDecoderV2 extends DSDecoderV2 implements AbstractUpdateDecoder {
       this.keys.add(key);
       return key;
     }
+  }
+
+  @override
+  String toString() {
+    return 'UpdateDecoderV2(dsCurrVal: $dsCurrVal\n'
+      '\keys: ${this.keys}\n'
+      '\trestDecoder: $restDecoder\n'
+      '\tkeyClockEncoder: $keyClockDecoder\n'
+      '\tclientDecoder: $clientDecoder\n'
+      '\leftClockDecoder: $leftClockDecoder\n'
+      '\rightClockDecoder: $rightClockDecoder\n'
+      '\infoDecoder: $infoDecoder\n'
+      '\stringDecoder: $stringDecoder\n'
+      '\parentInfoDecoder: $parentInfoDecoder\n'
+      '\typeRefDecoder: $typeRefDecoder\n'
+      '\lenDecoder: $lenDecoder)\n';
   }
 }

@@ -112,8 +112,6 @@ class DSEncoderV1 implements AbstractDSEncoder {
   @override
   encoding.Encoder restEncoder = encoding.Encoder();
 
-  static AbstractDSEncoder create() => DSEncoderV1();
-
   @override
   Uint8List toUint8Array() {
     return encoding.toUint8Array(this.restEncoder);
@@ -142,7 +140,6 @@ class DSEncoderV1 implements AbstractDSEncoder {
 }
 
 class UpdateEncoderV1 extends DSEncoderV1 implements AbstractUpdateEncoder {
-  static UpdateEncoderV1 create() => UpdateEncoderV1();
   /**
    * @param {ID} id
    */
@@ -243,10 +240,14 @@ class UpdateEncoderV1 extends DSEncoderV1 implements AbstractUpdateEncoder {
   void writeKey(key) {
     encoding.writeVarString(this.restEncoder, key);
   }
+
+  @override
+  String toString() {
+    return 'UpdateEncoderV1(restEncoder: $restEncoder)';
+  }
 }
 
 class DSEncoderV2 implements AbstractDSEncoder {
-  static DSEncoderV2 create() => DSEncoderV2();
   // encodes all the rest / non-optimized
   @override
   encoding.Encoder restEncoder = encoding.Encoder();
@@ -286,7 +287,6 @@ class DSEncoderV2 implements AbstractDSEncoder {
 }
 
 class UpdateEncoderV2 extends DSEncoderV2 implements AbstractUpdateEncoder {
-  static UpdateEncoderV2 create() => UpdateEncoderV2();
 
   /**
      * @type {Map<string,number>}
@@ -312,8 +312,7 @@ class UpdateEncoderV2 extends DSEncoderV2 implements AbstractUpdateEncoder {
   @override
   Uint8List toUint8Array() {
     final encoder = encoding.createEncoder();
-    encoding.writeUint8(
-        encoder, 0); // this is a feature flag that we might use in the future
+    encoding.writeUint8(encoder, 0); // this is a feature flag that we might use in the future
     encoding.writeVarUint8Array(encoder, this.keyClockEncoder.toUint8Array());
     encoding.writeVarUint8Array(encoder, this.clientEncoder.toUint8Array());
     encoding.writeVarUint8Array(encoder, this.leftClockEncoder.toUint8Array());
@@ -443,5 +442,22 @@ class UpdateEncoderV2 extends DSEncoderV2 implements AbstractUpdateEncoder {
     } else {
       this.keyClockEncoder.write(this.keyClock++);
     }
+  }
+
+  @override
+  String toString() {
+    return 'UpdateEncoderV2(restEncoder: $restEncoder\n'
+        '\tdsCurrVal: $dsCurrVal\n'
+        '\tkeyMap: $keyMap\n'
+        '\tkeyClock: $keyClock\n'
+        '\tkeyClockEncoder: $keyClockEncoder\n'
+        '\tclientEncoder: $clientEncoder\n'
+        '\tleftClockEncoder: $leftClockEncoder\n'
+        '\trightClockEncoder: $rightClockEncoder\n'
+        '\tinfoEncoder: $infoEncoder\n'
+        '\tstringEncoder: $stringEncoder\n'
+        '\tparentInfoEncoder: $parentInfoEncoder\n'
+        '\ttypeRefEncoder: $typeRefEncoder\n'
+        '\tlenEncoder: $lenEncoder)\n';
   }
 }

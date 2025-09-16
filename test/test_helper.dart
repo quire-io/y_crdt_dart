@@ -26,13 +26,30 @@ void broadcastMessage(TestYInstance y, Uint8List m) {
 
 var useV2 = false;
 
+/**
+ * @typedef {Object} Enc
+ * @property {function(Array<Uint8Array>):Uint8Array} Enc.mergeUpdates
+ * @property {function(Y.Doc):Uint8Array} Enc.encodeStateAsUpdate
+ * @property {function(Y.Doc, Uint8Array):void} Enc.applyUpdate
+ * @property {function(Uint8Array):void} Enc.logUpdate
+ * @property {function(Uint8Array):{from:Map<number,number>,to:Map<number,number>}} Enc.parseUpdateMeta
+ * @property {function(Y.Doc):Uint8Array} Enc.encodeStateVector
+ * @property {function(Uint8Array):Uint8Array} Enc.encodeStateVectorFromUpdate
+ * @property {'update'|'updateV2'} Enc.updateEventName
+ * @property {string} Enc.description
+ * @property {function(Uint8Array, Uint8Array):Uint8Array} Enc.diffUpdate
+ */
 abstract class Enc {
 
-  final String updateEventName;
+  final String updateEventName, description;
 
-  Enc(this.updateEventName);
+  Enc(this.updateEventName, [this.description = '']);
 
-  Uint8List encodeStateAsUpdate(y.Doc doc, Uint8List? encodedTargetStateVector);
+  Uint8List encodeStateVector(y.Doc doc);
+
+  Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]);
+
+  Uint8List encodeStateVectorFromUpdate(Uint8List update);
 
   Uint8List mergeUpdates(Iterable<Uint8List> updates);
 
@@ -42,14 +59,26 @@ abstract class Enc {
 
   Uint8List diffUpdate(Uint8List update, Uint8List sv);
 
+  (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update);
+
 }
 
 class EncV1 extends Enc {
-  EncV1() : super('update');
+  EncV1() : super('update', 'V1');
 
   @override
-  Uint8List encodeStateAsUpdate(y.Doc doc, Uint8List? encodedTargetStateVector) {
+  Uint8List encodeStateVector(y.Doc doc) {
+    return y.encodeStateVector(doc);
+  }
+
+  @override
+  Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]) {
     return y.encodeStateAsUpdate(doc, encodedTargetStateVector);
+  }
+
+  @override
+  Uint8List encodeStateVectorFromUpdate(Uint8List update) {
+    return y.encodeStateVectorFromUpdate(update);
   }
 
   @override
@@ -71,14 +100,29 @@ class EncV1 extends Enc {
   Uint8List diffUpdate(Uint8List update, Uint8List sv) {
     return y.diffUpdate(update, sv);
   }
+
+  @override
+  (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) {
+    return y.parseUpdateMeta(update);
+  }
 }
 
 class EncV2 extends Enc {
-  EncV2() : super('updateV2');
+  EncV2() : super('updateV2', 'V2');
 
   @override
-  Uint8List encodeStateAsUpdate(y.Doc doc, Uint8List? encodedTargetStateVector) {
+  Uint8List encodeStateVector(y.Doc doc) {
+    return y.encodeStateVector(doc);
+  }
+
+  @override
+  Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]) {
     return y.encodeStateAsUpdateV2(doc, encodedTargetStateVector);
+  }
+
+  @override
+  Uint8List encodeStateVectorFromUpdate(Uint8List update) {
+    return y.encodeStateVectorFromUpdateV2(update);
   }
 
   @override
@@ -99,6 +143,11 @@ class EncV2 extends Enc {
   @override
   Uint8List diffUpdate(Uint8List update, Uint8List sv) {
     return y.diffUpdateV2(update, sv);
+  }
+
+  @override
+  (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) {
+    return y.parseUpdateMetaV2(update);
   }
 }
 
@@ -348,13 +397,13 @@ Map<String, dynamic> init(TestCase tc, {int users = 5, initTestObject(TestYInsta
   final testConnector = TestConnector(gen);
   result['testConnector'] = testConnector;
   for (var i = 0; i < users; i++) {
-    final y = testConnector.createY(i);
-    y.clientID = i;
-    userList.add(y);
-    result['array$i'] = y.getArray('array');
-    result['map$i'] = y.getMap('map');
-    // result['xml' + i] = y.get('xml', Y.XmlElement);
-    result['text$i'] = y.getText('text');
+    final yInc = testConnector.createY(i);
+    yInc.clientID = i;
+    userList.add(yInc);
+    result['array$i'] = yInc.getArray('array');
+    result['map$i'] = yInc.getMap('map');
+    result['xml$i'] = yInc.get('xml', y.YXmlElement.new);
+    result['text$i'] = yInc.getText('text');
   }
   testConnector.syncAll();
   // result.testObjects = result.users.map(initTestObject || (() => null))
@@ -386,7 +435,7 @@ void compare(List users) {
   users.addAll(mergedDocs);
   final userArrayValues = users.cast<y.Doc>().map((u) => u.getArray('array').toJSON()).toList();
   final userMapValues = users.cast<y.Doc>().map((u) => u.getMap('map').toJSON()).toList();
-  // final userXmlValues = users.map((u) => u.get('xml', Y.XmlElement).toString());
+  final userXmlValues = users.cast<y.Doc>().map((u) => u.get('xml', y.YXmlElement.new).toString()).toList();
   final userTextValues = users.cast<y.Doc>().map((u) => u.getText('text').toDelta()).toList();
   for (final u in users.cast<y.Doc>()) {
     expect(u.store.pendingDs, null);
@@ -411,7 +460,7 @@ void compare(List users) {
     expect(userArrayValues[i].length, (users[i] as y.Doc).getArray('array').length);
     expect(userArrayValues[i], equals(userArrayValues[i + 1]));
     expect(userMapValues[i], equals(userMapValues[i + 1]));
-    // expect(userXmlValues[i], userXmlValues[i + 1])
+    expect(userXmlValues[i], equals(userXmlValues[i + 1]));
     expect(userTextValues[i].map(/** @param {any} a */ (a) 
       => a['insert'] is String ? a['insert'] : ' ').join('').length, 
       (users[i] as y.Doc).getText('text').length);

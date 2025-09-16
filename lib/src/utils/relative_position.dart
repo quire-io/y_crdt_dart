@@ -281,7 +281,7 @@ RelativePosition readRelativePosition(decoding.Decoder decoder) {
       // case 3: found position at the end of the list and type is attached to an item
       type = readID(decoder);
   }
-  final assoc = decoding.hasContent(decoder) ? decoding.readVarInt(decoder) : 0;
+  final assoc = decoding.hasContent(decoder) ? decoding.readVarInt(decoder).toInt() : 0;
   return RelativePosition(type, tname, itemID, assoc);
 }
 

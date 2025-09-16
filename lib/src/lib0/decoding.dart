@@ -29,6 +29,7 @@ import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart' show Int64;
 import 'package:y_crdt/src/lib0/binary.dart' as binary;
+import 'package:y_crdt/src/y_crdt_base.dart';
 
 bool isNegativeZero(num n) => n != 0 ? n < 0 : 1 / n < 0;
 
@@ -54,6 +55,11 @@ class Decoder {
      * @type {number}
      */
   int pos = 0;
+
+  @override
+  String toString() {
+    return 'Decoder(arr: $arr, pos: $pos)';
+  }
 }
 
 /**
@@ -273,27 +279,33 @@ const int maxSafeInteger = (1 << 53) - 1;
  * @param {Decoder} decoder
  * @return {number} An unsigned integer.length
  */
-int readVarInt(Decoder decoder) {
-  var r = decoder.arr[decoder.pos++];
-  var number = r & binary.BITS6;
-  var len = 6;
+//only double suppoort -0
+num readVarInt(Decoder decoder) {
+  var r = atX(decoder.arr, decoder.pos++) ?? 0;
+  // print('r $r');
+  double num = (r & binary.BITS6).toDouble();//for -0
+  var mult = 64;
   final sign = (r & binary.BIT7) > 0 ? -1 : 1;
   if ((r & binary.BIT8) == 0) {
     // don't continue reading
-    return sign * number;
+    return sign * num;
   }
-  while (true) {
+  final len = decoder.arr.length;
+  while (decoder.pos < len) {
     r = decoder.arr[decoder.pos++];
-    number = number | ((r & binary.BITS7) << len);
-    len += 7;
+    // num = num | ((r & binary.BITS7) << len)
+    num = num + (r & binary.BITS7) * mult;
+    mult *= 128;
     if (r < binary.BIT8) {
-      return sign * rightShift(number, 0);
+      return sign * num;
     }
-    /* istanbul ignore if */
-    if (len > 41) {
+    /* c8 ignore start */
+    if (num > maxSafeInteger) {
       throw Exception('Integer out of range!');
     }
+    /* c8 ignore stop */
   }
+  throw Exception('Unexpected end of array');
 }
 
 /**
@@ -319,7 +331,7 @@ int peekVarUint(Decoder decoder) {
  */
 int peekVarInt(Decoder decoder) {
   final pos = decoder.pos;
-  final s = readVarInt(decoder);
+  final s = readVarInt(decoder).toInt();
   decoder.pos = pos;
   return s;
 }
@@ -509,14 +521,14 @@ class IntDiffDecoder extends Decoder {
      * Current state
      * @type {number}
      */
-  int s;
+  num s;
 
   /**
    * @return {number}
    */
   int read() {
     this.s += readVarInt(this);
-    return this.s;
+    return this.s.toInt();
   }
 }
 
@@ -530,7 +542,7 @@ class RleIntDiffDecoder extends Decoder {
      * Current state
      * @type {number}
      */
-  int s;
+  num s;
   int count = 0;
 
   /**
@@ -547,7 +559,7 @@ class RleIntDiffDecoder extends Decoder {
       }
     }
     this.count--;
-    return /** @type {number} */ this.s;
+    return /** @type {number} */ this.s.toInt();
   }
 }
 
@@ -559,7 +571,7 @@ class UintOptRleDecoder extends Decoder {
   /**
      * @type {number}
      */
-  int s = 0;
+  num s = 0;
   int count = 0;
 
   int read() {
@@ -574,7 +586,12 @@ class UintOptRleDecoder extends Decoder {
       }
     }
     this.count--;
-    return /** @type {number} */ this.s;
+    return /** @type {number} */ this.s.toInt();
+  }
+
+  @override
+  String toString() {
+    return 'UintOptRleDecoder(s: $s, count: $count, arr: ${arr}, pos: $pos)';
   }
 }
 
@@ -586,7 +603,7 @@ class IncUintOptRleDecoder extends Decoder {
   /**
      * @type {number}
      */
-  int s = 0;
+  num s = 0;
   int count = 0;
 
   int read() {
@@ -601,7 +618,7 @@ class IncUintOptRleDecoder extends Decoder {
       }
     }
     this.count--;
-    return /** @type {number} */ this.s++;
+    return /** @type {number} */ (this.s++).toInt();
   }
 }
 
@@ -622,13 +639,13 @@ class IntDiffOptRleDecoder extends Decoder {
    */
   int read() {
     if (this.count == 0) {
-      final diff = readVarInt(this);
+      final diff = readVarInt(this).toInt();
       // if the first bit is set, we read more data
       final hasCount = diff & 1;
       this.diff = diff >> 1;
       this.count = 1;
       if (hasCount != 0) {
-        this.count = readVarUint(this) + 2;
+        this.count = readVarUint(this).toInt() + 2;
       }
     }
     this.s += this.diff;

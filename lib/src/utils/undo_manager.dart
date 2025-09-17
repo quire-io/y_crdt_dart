@@ -22,6 +22,7 @@
 // import * as time from "lib0/time.js";
 // import { Observable } from "lib0/observable.js";
 
+import 'package:y_crdt/src/structs/abstract_struct.dart';
 import 'package:y_crdt/src/structs/item.dart';
 import 'package:y_crdt/src/types/abstract_type.dart';
 import 'package:y_crdt/src/utils/delete_set.dart';
@@ -141,10 +142,11 @@ StackItem? popStackItem(
   final res = undoManager.currStackItem;
   if (res != null) {
     final changedParentTypes = _tr.changedParentTypes;
-    undoManager.emit('stack-item-popped', [{ 
-      'stackItem': res, 'type': eventType, 
-      'changedParentTypes': changedParentTypes, 
-      'origin': undoManager }, undoManager]);
+    undoManager.emit('stack-item-popped', [toUndoEventData( 
+      stackItem: res, 
+      type: eventType, 
+      changedParentTypes: changedParentTypes, 
+      origin: undoManager), undoManager]);
     undoManager.currStackItem = null;
   }
   return res;
@@ -203,11 +205,12 @@ class UndoManager extends Observable {
     this.captureTransaction = _asTrue,
     this.deleteFilter = _asTrue,
     Set<dynamic>? trackedOrigins,
-    this.ignoreRemoteMapChanges = false
+    this.ignoreRemoteMapChanges = false,
+    Doc? doc
   }):
-    this.trackedOrigins = trackedOrigins ?? {[null]},
-    this.doc = typeScope is List ? (typeScope[0] as AbstractType).doc!:
-      typeScope is Doc ? typeScope: (typeScope as AbstractType).doc! {
+    this.trackedOrigins = trackedOrigins ?? {null},
+    this.doc = doc ?? (typeScope is List ? (typeScope[0] as AbstractType).doc!:
+      typeScope is Doc ? typeScope: (typeScope as AbstractType).doc!) {
 
     this.addToScope(typeScope);
     this.trackedOrigins.add(this);
@@ -225,7 +228,7 @@ class UndoManager extends Observable {
 
   late final Doc doc;
   
-  final bool Function(Item) deleteFilter;
+  final bool Function(AbstractStruct) deleteFilter;
 
   late final Set<dynamic> trackedOrigins;
 
@@ -284,7 +287,7 @@ class UndoManager extends Observable {
       this.clear(false, true);
     }
     final insertions = DeleteSet();
-    transaction.afterState.forEach((endClock, client) {
+    transaction.afterState.forEach((client, endClock) {
       final startClock = transaction.beforeState[client] ?? 0;
       final len = endClock - startClock;
       if (len > 0) {
@@ -316,9 +319,11 @@ class UndoManager extends Observable {
     /**
      * @type {[StackItemEvent, UndoManager]}
      */
-    final changeEvent = [{ 'stackItem': stack[stack.length - 1], 
-      'origin': transaction.origin, 'type': undoing ? 'redo' : 'undo', 
-      'changedParentTypes': transaction.changedParentTypes }, this];
+    final changeEvent = [toUndoEventData(
+      stackItem: stack[stack.length - 1],
+      origin: transaction.origin,
+      type: undoing ? 'redo' : 'undo',
+      changedParentTypes: transaction.changedParentTypes), this];
     if (didAdd) {
       this.emit('stack-item-added', changeEvent);
     } else {

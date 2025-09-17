@@ -1344,8 +1344,7 @@ class YText extends AbstractType<YTextEvent> {
    * @public
    */
   void insertEmbed(
-    int index,
-    Map<String, dynamic> embed, [
+    int index, Object embed, [
     Map<String, Object?>? attributes,
   ]) {
     // if (embed.constructor != Object) {

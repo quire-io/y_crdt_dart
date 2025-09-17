@@ -13,6 +13,7 @@ import 'package:y_crdt/src/types/y_text.dart';
 import 'package:y_crdt/src/utils/observable.dart';
 import 'package:y_crdt/src/utils/struct_store.dart';
 import 'package:y_crdt/src/utils/transaction.dart' show Transaction, transact;
+import 'package:y_crdt/src/utils/undo_manager.dart';
 import 'package:y_crdt/src/utils/y_event.dart';
 import 'package:y_crdt/src/y_crdt_base.dart';
 
@@ -416,5 +417,28 @@ Map<String, dynamic> toSubdocsEventData({
     added: (data['added'] as Set<Doc>?) ?? <Doc>{}, 
     removed: (data['removed'] as Set<Doc>?) ?? <Doc>{}
   );
+}
 
+Map<String, dynamic> toUndoEventData({
+    required StackItem stackItem,
+    required String? type, 
+    required Map<AbstractType<YEvent>, List<YEvent>>? changedParentTypes,
+    origin}) {
+  return {
+    'stackItem': stackItem, 
+      'origin': origin, 
+      'type': type, 
+      'changedParentTypes': changedParentTypes
+  };
+}
+
+({StackItem stackItem, String? type, dynamic origin, 
+    Map<AbstractType<YEvent>, List<YEvent>>? changedParentTypes}) fromUndoEventData(List args) {
+  final data = args[0] as Map<String, dynamic>;
+  return (
+    stackItem: data['stackItem'] as StackItem,
+    type: data['type'] as String?,
+    origin: data['origin'],
+    changedParentTypes: (data['changedParentTypes'] as Map<AbstractType<YEvent>, List<YEvent>>?)
+  );
 }

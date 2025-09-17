@@ -258,15 +258,13 @@ int readVarUint(Decoder decoder) {
       return num;
     }
     /* c8 ignore start */
-    if (num > maxSafeInteger) {
+    if (num > double.maxFinite) {
       throw Exception('Integer out of range!');
     }
     /* c8 ignore stop */
   }
   throw Exception('Unexpected end of array');
 }
-
-const int maxSafeInteger = (1 << 53) - 1;
 
 /**
  * Read signed integer (32bit) with variable length.
@@ -300,7 +298,7 @@ num readVarInt(Decoder decoder) {
       return sign * num;
     }
     /* c8 ignore start */
-    if (num > maxSafeInteger) {
+    if (num > double.maxFinite) {
       throw Exception('Integer out of range!');
     }
     /* c8 ignore stop */

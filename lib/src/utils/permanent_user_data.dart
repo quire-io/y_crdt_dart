@@ -51,7 +51,7 @@ class PermanentUserData {
       final ds = user.get("ds")! as YArray;
       final ids = user.get("ids")! as YArray;
       final addClientId =
-          (int clientid) => this.clients.set(clientid, userDescription);
+          (num clientid) => this.clients.set(clientid, userDescription);
       ds.observe(
           /** @param {YArrayEvent<any>} event */ (event, _) {
         event.changes.added.forEach((item) {
@@ -85,7 +85,7 @@ class PermanentUserData {
           (item) => item.content.getContent().cast<int>().forEach(addClientId),
         ),
       );
-      ids.forEach((v) => addClientId(v as int));
+      ids.forEach((v) => addClientId(v as num));
     }
 
     // observe users
@@ -107,7 +107,7 @@ class PermanentUserData {
    *
    * @type {Map<number,string>}
    */
-  final clients = <int, String>{};
+  final clients = <num, String>{};
 
   /**
      * @type {Map<string,DeleteSet>}

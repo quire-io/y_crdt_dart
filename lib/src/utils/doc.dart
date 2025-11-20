@@ -411,7 +411,7 @@ Map<String, dynamic> toSubdocsEventData({
 }
 
 ({Set<Doc> loaded, Set<Doc> added, Set<Doc> removed}) fromSubdocsEventData(List args) {
-  final data = args[0] as Map<String, dynamic>;
+  final data = args[0] as Map;
   return (
     loaded: (data['loaded'] as Set<Doc>?) ?? <Doc>{}, 
     added: (data['added'] as Set<Doc>?) ?? <Doc>{}, 
@@ -434,7 +434,7 @@ Map<String, dynamic> toUndoEventData({
 
 ({StackItem stackItem, String? type, dynamic origin, 
     Map<AbstractType<YEvent>, List<YEvent>>? changedParentTypes}) fromUndoEventData(List args) {
-  final data = args[0] as Map<String, dynamic>;
+  final data = args[0] as Map;
   return (
     stackItem: data['stackItem'] as StackItem,
     type: data['type'] as String?,

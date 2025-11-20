@@ -347,7 +347,7 @@ void _insertText(
   final content = switch(text) {
     String text => ContentString(/** @type {string} */ text),
     AbstractType _ => ContentType(text),
-    _ => ContentEmbed(text as Map<String, dynamic>)
+    _ => ContentEmbed((text as Map).cast<String, dynamic>())
   };
   final index = currPos.index;
   var right = currPos.right;
@@ -1212,8 +1212,7 @@ class YText extends AbstractType<YTextEvent> {
             (prevSnapshot != null && isVisible(_n, prevSnapshot))) {
           switch(_n.content) {
             case ContentString content:
-              final cur =
-                currentAttributes.get("ychange") as Map<String, Object?>?;
+              final cur = currentAttributes.get("ychange") as Map?;
               if (snapshot != null && !isVisible(_n, snapshot)) {
                 if (cur == null ||
                     cur["user"] != _n.id.client ||

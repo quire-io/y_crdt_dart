@@ -115,9 +115,9 @@ Map<String, Object?> relativePositionToJSON(RelativePosition rpos) {
  * @function
  */
 RelativePosition createRelativePositionFromJSON(Map<String, Object?> json) {
-  final type = json["type"] as Map<String, Object?>?;
+  final type = json["type"] as Map?;
   // TODO: innerItem?
-  final innerItem = json["innerItem"] as Map<String, Object?>?;
+  final innerItem = json["innerItem"] as Map?;
   return RelativePosition(
     type == null
         ? null

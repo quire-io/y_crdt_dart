@@ -138,7 +138,7 @@ class WebRtcSignalingServer {
     conn.listen(
       (_message) {
         print('onmessage $_message');
-        final message = (jsonDecode(_message as String) as Map?)?.cast<String, dynamic>();
+        final message = jsonDecode(_message as String) as Map<String, dynamic>?;
 
         if (message != null && message['type'] is String && !closed) {
           final List<String?> _topics =

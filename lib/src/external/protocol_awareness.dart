@@ -55,7 +55,7 @@ class Awareness extends Observable<String> {
    * Maps from client id to client state
    * @type {Map<number, Object<string, any>>}
    */
-  final states = <int, Map<String, Object>>{};
+  final states = <int, Map<String, Object?>>{};
   /**
    * @type {Map<number, MetaClientState>}
    */
@@ -114,14 +114,14 @@ class Awareness extends Observable<String> {
   /**
    * @return {Object<string,any>|null}
    */
-  Map<String, Object>? getLocalState() {
+  Map<String, Object?>? getLocalState() {
     return this.states.get(this.clientID);
   }
 
   /**
    * @param {Object<string,any>|null} state
    */
-  void setLocalState(Map<String, Object>? state) {
+  void setLocalState(Map<String, Object?>? state) {
     final clientID = this.clientID;
     final currLocalMeta = this.meta.get(clientID);
     final clock = currLocalMeta == null ? 0 : currLocalMeta.clock + 1;
@@ -167,7 +167,7 @@ class Awareness extends Observable<String> {
    * @param {string} field
    * @param {any} value
    */
-  void setLocalStateField(String field, Object value) {
+  void setLocalStateField(String field, Object? value) {
     final state = this.getLocalState();
     if (state != null) {
       state[field] = value;

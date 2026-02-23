@@ -85,6 +85,8 @@ class RelativePosition {
    * @type {number}
    */
   int assoc;
+
+  Map<String, Object?> toJson() => relativePositionToJSON(this);
 }
 
 /**

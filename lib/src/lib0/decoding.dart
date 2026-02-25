@@ -26,6 +26,7 @@
  * @module decoding
  */
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:fixnum/fixnum.dart' show Int64;
 import 'package:y_crdt/src/lib0/binary.dart' as binary;
@@ -348,6 +349,11 @@ int peekVarInt(Decoder decoder) {
  * @return {String} The read String.
  */
 String readVarString(Decoder decoder) {
+  //string.utf8TextDecoder ? _readVarStringNative : _readVarStringPolyfill
+  return _readVarStringNative(decoder);
+}
+/**
+String _readVarStringPolyfill(Decoder decoder) {
   var remainingLen = readVarUint(decoder);
   if (remainingLen == 0) {
     return '';
@@ -374,6 +380,17 @@ String readVarString(Decoder decoder) {
     // return decodeURIComponent(escape(encodedString));
     return Uri.decodeComponent(encodedString);
   }
+}
+*/
+String _readVarStringNative(Decoder decoder) {
+  ////** @type any */ (string.utf8TextDecoder).decode(readVarUint8Array(decoder))
+  final bytes = readVarUint8Array(decoder);
+  if (bytes.length >= 3 && bytes[0] == 239 && bytes[1] == 187 && bytes[2] == 191) {
+    // Return the BOM character + the rest of the string
+    //for fix "�"
+    return "\uFEFF" + utf8.decode(bytes.sublist(3));
+  }
+  return utf8.decode(bytes);
 }
 
 /**

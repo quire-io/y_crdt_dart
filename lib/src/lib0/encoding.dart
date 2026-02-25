@@ -27,6 +27,7 @@
  */
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:y_crdt/src/lib0/binary.dart' as binary;
 import 'package:y_crdt/src/lib0/decoding.dart' show isNegativeZero, rightShift;
@@ -304,6 +305,14 @@ void writeVarInt(Encoder encoder, num _number) {
  * @param {String} str The string that is to be encoded.
  */
 void writeVarString(Encoder encoder, String str) {
+  ///(string.utf8TextEncoder && /** @type {any} */ 
+  /// (string.utf8TextEncoder).encodeInto) 
+  /// ? _writeVarStringNative : _writeVarStringPolyfill
+  _writeVarStringNative(encoder, str);
+}
+
+/**
+void _writeVarStringPolyfill(Encoder encoder, String str) {
   // TODO:
   // final encodedString = unescape(encodeURIComponent(str));
   final encodedString = Uri.encodeComponent(str);
@@ -311,6 +320,34 @@ void writeVarString(Encoder encoder, String str) {
   writeVarUint(encoder, len);
   for (var i = 0; i < len; i++) {
     write(encoder, /** @type {number} */ encodedString.codeUnitAt(i));
+  }
+}
+*/
+
+/**
+ * A cache to store strings temporarily
+ */
+final Uint8List _strBuffer = Uint8List(30000);
+final int _maxStrBSize = (_strBuffer.length / 3).floor();
+
+void _writeVarStringNative(Encoder encoder, String str) {
+  // 1. Convert string to UTF-8 bytes
+  // In Dart, utf8.encode(str) returns a List<int>
+  List<int> encodedBytes = utf8.encode(str);
+  int written = encodedBytes.length;
+
+  if (written < _maxStrBSize) {
+    // Write the length of the string first
+    writeVarUint(encoder, written);
+    
+    // Write each byte from the encoded list
+    for (int i = 0; i < written; i++) {
+      write(encoder, encodedBytes[i]);
+    }
+  } else {
+    // If it's larger than the buffer, write as a full Uint8List
+    // Assuming you have a helper for this like in your JS code
+    writeVarUint8Array(encoder, Uint8List.fromList(encodedBytes));
   }
 }
 

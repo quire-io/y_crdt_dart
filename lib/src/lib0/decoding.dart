@@ -385,10 +385,12 @@ String _readVarStringPolyfill(Decoder decoder) {
 String _readVarStringNative(Decoder decoder) {
   ////** @type any */ (string.utf8TextDecoder).decode(readVarUint8Array(decoder))
   final bytes = readVarUint8Array(decoder);
-  if (bytes.length >= 3 && bytes[0] == 239 && bytes[1] == 187 && bytes[2] == 191) {
-    // Return the BOM character + the rest of the string
-    //for fix "�"
-    return "\uFEFF" + utf8.decode(bytes.sublist(3));
+  // Use a slightly more robust check for the BOM
+  if (bytes.length >= 3 && 
+      bytes[0] == 0xEF && 
+      bytes[1] == 0xBB && 
+      bytes[2] == 0xBF) {
+    return "\uFEFF${utf8.decode(bytes.sublist(3))}";
   }
   return utf8.decode(bytes);
 }

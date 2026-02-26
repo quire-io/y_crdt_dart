@@ -362,7 +362,7 @@ Uint8List? readAndApplyDeleteSet(
     }
   }
   if (unappliedDS.clients.length > 0) {
-    final ds = UpdateEncoderV2();
+    final ds = UpdateEncoderV2(decoder.restDecoder.polyfill);
     encoding.writeVarUint(ds.restEncoder, 0); // encode 0 structs
     writeDeleteSet(ds, unappliedDS);
     return ds.toUint8Array();

@@ -255,7 +255,7 @@ encoding.Encoder writeRelativePosition(
  * @return {Uint8Array}
  */
 Uint8List encodeRelativePosition(RelativePosition rpos) {
-  final encoder = encoding.createEncoder();
+  final encoder = encoding.createEncoder(false);
   writeRelativePosition(encoder, rpos);
   return encoding.toUint8Array(encoder);
 }
@@ -292,7 +292,7 @@ RelativePosition readRelativePosition(decoding.Decoder decoder) {
  * @return {RelativePosition|null}
  */
 RelativePosition decodeRelativePosition(Uint8List uint8Array) =>
-    readRelativePosition(decoding.createDecoder(uint8Array));
+    readRelativePosition(decoding.createDecoder(uint8Array, false));
 
 /**
  * @param {StructStore} store

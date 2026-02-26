@@ -286,7 +286,7 @@ void tryGc(DeleteSet ds, StructStore store, bool Function(Item) gcFilter) {
  * @param {List<Transaction>} transactionCleanups
  * @param {number} i
  */
-void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
+void cleanupTransactions(List<Transaction> transactionCleanups, int i, bool polyfill) {
   if (i < transactionCleanups.length) {
     final transaction = transactionCleanups[i];
     final doc = transaction.doc;
@@ -389,7 +389,7 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
       // @todo Merge all the transactions into one and provide send the data as a single update message
       doc.emit('afterTransactionCleanup', [transaction, doc]);
       if (doc.innerObservers.containsKey('update')) {
-        final encoder = UpdateEncoderV1();
+        final encoder = UpdateEncoderV1(polyfill);
         final hasContent =
             writeUpdateMessageFromTransaction(encoder, transaction);
         if (hasContent) {
@@ -397,7 +397,7 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
         }
       }
       if (doc.innerObservers.containsKey('updateV2')) {
-        final encoder = UpdateEncoderV2();
+        final encoder = UpdateEncoderV2(polyfill);
         final hasContent =
             writeUpdateMessageFromTransaction(encoder, transaction);
         if (hasContent) {
@@ -433,7 +433,7 @@ void cleanupTransactions(List<Transaction> transactionCleanups, int i) {
         doc.transactionCleanups = [];
         doc.emit('afterAllTransactions', [doc, transactionCleanups]);
       } else {
-        cleanupTransactions(transactionCleanups, i + 1);
+        cleanupTransactions(transactionCleanups, i + 1, polyfill);
       }
     }
   }
@@ -482,7 +482,7 @@ dynamic transact(Doc doc, dynamic Function(Transaction) f,
       // observes throw errors.
       // This file is full of hacky try {} finally {} blocks to ensure that an
       // event can throw errors and also that the cleanup is called.
-        cleanupTransactions(transactionCleanups, 0);
+        cleanupTransactions(transactionCleanups, 0, false);
       }
     }
   }

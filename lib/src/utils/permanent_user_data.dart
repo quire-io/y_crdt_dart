@@ -62,7 +62,7 @@ class PermanentUserData {
                     mergeDeleteSets([
                       this.dss.get(userDescription) ?? createDeleteSet(),
                       readDeleteSet(
-                          DSDecoderV1(decoding.createDecoder(encodedDs))),
+                          DSDecoderV1(decoding.createDecoder(encodedDs, false))),
                     ]),
                   );
             }
@@ -74,7 +74,7 @@ class PermanentUserData {
             mergeDeleteSets(ds
                 .map(
                   (encodedDs) => readDeleteSet(DSDecoderV1(
-                    decoding.createDecoder(encodedDs as Uint8List),
+                    decoding.createDecoder(encodedDs as Uint8List, false),
                   )),
                 )
                 .toList()),
@@ -149,7 +149,7 @@ class PermanentUserData {
               user!.get("ids").push([clientid]);
             }
           });
-          final encoder = DSEncoderV1();
+          final encoder = DSEncoderV1(false);
           final ds = this.dss.get(userDescription);
           if (ds != null) {
             writeDeleteSet(encoder, ds);
@@ -167,7 +167,7 @@ class PermanentUserData {
         if (transaction.local &&
             ds.clients.length > 0 &&
             filter(transaction, ds)) {
-          final encoder = DSEncoderV1();
+          final encoder = DSEncoderV1(false);
           writeDeleteSet(encoder, ds);
           yds.push([encoder.toUint8Array()]);
         }

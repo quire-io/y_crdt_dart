@@ -216,7 +216,8 @@ Map<int, _ClietnRefs> readClientsStructRefs(
  * @private
  * @function
  */
-PendingStructs? integrateStructs(Transaction transaction, StructStore store, Map<int, _ClietnRefs> clientsStructRefs) {
+PendingStructs? integrateStructs(bool polyfill, Transaction transaction, 
+    StructStore store, Map<int, _ClietnRefs> clientsStructRefs) {
   /**
    * @type {Array<Item | GC>}
    */
@@ -345,7 +346,7 @@ PendingStructs? integrateStructs(Transaction transaction, StructStore store, Map
     }
   }
   if (restStructs.clients.isNotEmpty) {
-    final encoder = UpdateEncoderV2();
+    final encoder = UpdateEncoderV2(polyfill);
     writeClientsStructs(encoder, restStructs, {});
     // write empty deleteset
     // writeDeleteSet(encoder, new DeleteSet())
@@ -380,7 +381,7 @@ void writeStructsFromTransaction(
  * @function
  */
 void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
-    AbstractUpdateDecoder? structDecoder) {
+    AbstractUpdateDecoder? structDecoder, bool polyfill) {
   structDecoder ??= UpdateDecoderV2(decoder);
   transact(ydoc, (transaction) {
     // readStructs(_structDecoder, transaction, ydoc.store);
@@ -396,7 +397,7 @@ void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
     // start = performance.now()
     // console.log('time to merge: ', performance.now() - start) // @todo remove
     // start = performance.now()
-    final restStructs = integrateStructs(transaction, store, ss);
+    final restStructs = integrateStructs(polyfill, transaction, store, ss);
     final pending = store.pendingStructs;
     if (pending != null) {
       // check if we can apply something
@@ -418,7 +419,7 @@ void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
             pending.missing.set(client, clock);
           }
         }
-        pending.update = mergeUpdatesV2([pending.update, restStructs.update]);
+        pending.update = mergeUpdatesV2(decoder.polyfill, [pending.update, restStructs.update]);
       }
     } else {
       store.pendingStructs = restStructs;
@@ -428,12 +429,12 @@ void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
     final dsRest = readAndApplyDeleteSet(structDecoder, transaction, store);
     if (store.pendingDs != null) {
       // @todo we could make a lower-bound state-vector check as we do above
-      final pendingDSUpdate = UpdateDecoderV2(decoding.createDecoder(store.pendingDs!));
+      final pendingDSUpdate = UpdateDecoderV2(decoding.createDecoder(store.pendingDs!, polyfill));
       decoding.readVarUint(pendingDSUpdate.restDecoder); // read 0 structs, because we only encode deletes in pendingdsupdate
       final dsRest2 = readAndApplyDeleteSet(pendingDSUpdate, transaction, store);
       if (dsRest != null && dsRest2 != null) {
         // case 1: ds1 != null && ds2 != null
-        store.pendingDs = mergeUpdatesV2([dsRest, dsRest2]);
+        store.pendingDs = mergeUpdatesV2(decoder.polyfill, [dsRest, dsRest2]);
       } else {
         // case 2: ds1 != null
         // case 3: ds2 != null
@@ -452,7 +453,7 @@ void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
     if (retry) {
       final update = /** @type {{update: Uint8Array}} */ (store.pendingStructs)!.update;
       store.pendingStructs = null;
-      applyUpdateV2(transaction.doc, update);
+      applyUpdateV2(polyfill, transaction.doc, update);
     }
   }, transactionOrigin, false);
 }
@@ -469,9 +470,9 @@ void readUpdateV2(decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin,
  * @function
  */
 void readUpdate(
-        decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin) =>
+        decoding.Decoder decoder, Doc ydoc, dynamic transactionOrigin, bool polyfill) =>
     readUpdateV2(
-        decoder, ydoc, transactionOrigin, UpdateDecoderV1(decoder));
+        decoder, ydoc, transactionOrigin, UpdateDecoderV1(decoder), polyfill);
 
 /**
  * Apply a document update created by, for example, `y.on('update', update => ..)` or `update = encodeStateAsUpdate()`.
@@ -486,14 +487,14 @@ void readUpdate(
  * @function
  */
 void applyUpdateV2(
-  Doc ydoc,
+  bool polyfill, Doc ydoc,
   Uint8List update, [
   dynamic transactionOrigin, 
   AbstractUpdateDecoder Function(decoding.Decoder decoder)? YDecoder,
 ]) {
   final _YDecoder = YDecoder ?? UpdateDecoderV2.new;
-  final decoder = decoding.createDecoder(update);
-  readUpdateV2(decoder, ydoc, transactionOrigin, _YDecoder(decoder));
+  final decoder = decoding.createDecoder(update, polyfill);
+  readUpdateV2(decoder, ydoc, transactionOrigin, _YDecoder(decoder), polyfill);
 }
 
 /**
@@ -507,8 +508,8 @@ void applyUpdateV2(
  *
  * @function
  */
-void applyUpdate(Doc ydoc, Uint8List update, [dynamic transactionOrigin]) =>
-    applyUpdateV2(ydoc, update, transactionOrigin, UpdateDecoderV1.new);
+void applyUpdate(bool polyfill, Doc ydoc, Uint8List update, [dynamic transactionOrigin]) =>
+    applyUpdateV2(polyfill, ydoc, update, transactionOrigin, UpdateDecoderV1.new);
 
 /**
  * Write all the document as a single update message. If you specify the state of the remote client (`targetStateVector`) it will
@@ -539,13 +540,13 @@ void writeStateAsUpdate(AbstractUpdateEncoder encoder, Doc doc,
  *
  * @function
  */
-Uint8List encodeStateAsUpdateV2(Doc doc,[
+Uint8List encodeStateAsUpdateV2(bool polyfill, Doc doc, [
     Uint8List? encodedTargetStateVector,
     AbstractUpdateEncoder? encoder]) {
   encodedTargetStateVector ??= Uint8List.fromList([0]);
-  encoder ??= UpdateEncoderV2();
+  encoder ??= UpdateEncoderV2(polyfill);
 
-  final targetStateVector = decodeStateVector(encodedTargetStateVector);
+  final targetStateVector = decodeStateVector(polyfill, encodedTargetStateVector);
   writeStateAsUpdate(encoder, doc, targetStateVector);
   final updates = [encoder.toUint8Array()];
   // also add the pending updates (if there are any)
@@ -553,18 +554,20 @@ Uint8List encodeStateAsUpdateV2(Doc doc,[
     updates.add(doc.store.pendingDs!);
   }
   if (doc.store.pendingStructs case PendingStructs pendingStructs) {
-    updates.add(diffUpdateV2(pendingStructs.update, encodedTargetStateVector));
+    updates.add(diffUpdateV2(encoder.polyfill, 
+      pendingStructs.update, 
+      encodedTargetStateVector));
   }
   if (updates.length > 1) {
     if (encoder is UpdateEncoderV1) {
       var i = 0;
-      return mergeUpdates(updates.map((update) {
+      return mergeUpdates(encoder.polyfill, updates.map((update) {
         final value = i == 0 ? update : convertUpdateFormatV2ToV1(update);
         i++;
         return value;
       }));
     } else if (encoder is UpdateEncoderV2) {
-      return mergeUpdatesV2(updates);
+      return mergeUpdatesV2(encoder.polyfill, updates);
     }
   }
   return updates[0];
@@ -582,9 +585,9 @@ Uint8List encodeStateAsUpdateV2(Doc doc,[
  *
  * @function
  */
-Uint8List encodeStateAsUpdate(Doc doc, [Uint8List? encodedTargetStateVector]) =>
+Uint8List encodeStateAsUpdate(bool polyfill, Doc doc, [Uint8List? encodedTargetStateVector]) =>
     encodeStateAsUpdateV2(
-        doc, encodedTargetStateVector, UpdateEncoderV1());
+        polyfill, doc, encodedTargetStateVector, UpdateEncoderV1(polyfill));
 
 /**
  * Read state vector from Decoder and return as Map
@@ -624,8 +627,8 @@ Map<int, int> readStateVector(AbstractDSDecoder decoder) {
  *
  * @function
  */
-Map<int, int> decodeStateVector(Uint8List decodedState) =>
-    readStateVector(DSDecoderV1(decoding.createDecoder(decodedState)));
+Map<int, int> decodeStateVector(bool polyfill, Uint8List decodedState) =>
+    readStateVector(DSDecoderV1(decoding.createDecoder(decodedState, polyfill)));
 
 /**
  * @param {AbstractDSEncoder} encoder
@@ -664,7 +667,7 @@ void writeDocumentStateVector(AbstractDSEncoder encoder, Doc doc) =>
  * @function
  */
 Uint8List encodeStateVectorV2(doc, [AbstractDSEncoder? encoder]) {
-  final _encoder = encoder ?? DSEncoderV2();
+  final _encoder = encoder ?? DSEncoderV2(false);
   if (doc case Map<int, int> map) {
     writeStateVector(_encoder, map);
   } else {
@@ -681,5 +684,5 @@ Uint8List encodeStateVectorV2(doc, [AbstractDSEncoder? encoder]) {
  *
  * @function
  */
-Uint8List encodeStateVector(Doc doc) =>
-    encodeStateVectorV2(doc, DSEncoderV1());
+Uint8List encodeStateVector(bool polyfill, Doc doc) =>
+    encodeStateVectorV2(doc, DSEncoderV1(polyfill));

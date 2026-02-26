@@ -13,7 +13,11 @@ import 'package:y_crdt/src/y_crdt_base.dart';
 // } from "../internals.js";
 
 abstract class AbstractDSEncoder {
-  encoding.Encoder restEncoder = encoding.createEncoder();
+
+  final bool polyfill;
+  AbstractDSEncoder(this.polyfill);
+
+  late encoding.Encoder restEncoder = encoding.createEncoder(polyfill);
 
   /**
    * @return {Uint8Array}
@@ -38,6 +42,8 @@ abstract class AbstractDSEncoder {
 }
 
 abstract class AbstractUpdateEncoder extends AbstractDSEncoder {
+
+  AbstractUpdateEncoder(super.polyfill);
   /**
    * @return {Uint8Array}
    */
@@ -110,7 +116,11 @@ abstract class AbstractUpdateEncoder extends AbstractDSEncoder {
 
 class DSEncoderV1 implements AbstractDSEncoder {
   @override
-  encoding.Encoder restEncoder = encoding.Encoder();
+  final bool polyfill;
+  DSEncoderV1(this.polyfill);
+
+  @override
+  late encoding.Encoder restEncoder = encoding.createEncoder(polyfill);
 
   @override
   Uint8List toUint8Array() {
@@ -140,6 +150,8 @@ class DSEncoderV1 implements AbstractDSEncoder {
 }
 
 class UpdateEncoderV1 extends DSEncoderV1 implements AbstractUpdateEncoder {
+  UpdateEncoderV1(super.polyfill);
+
   /**
    * @param {ID} id
    */
@@ -248,9 +260,13 @@ class UpdateEncoderV1 extends DSEncoderV1 implements AbstractUpdateEncoder {
 }
 
 class DSEncoderV2 implements AbstractDSEncoder {
+  @override
+  final bool polyfill;
+  DSEncoderV2(this.polyfill);
+
   // encodes all the rest / non-optimized
   @override
-  encoding.Encoder restEncoder = encoding.Encoder();
+  late encoding.Encoder restEncoder = encoding.Encoder(polyfill);
   int dsCurrVal = 0;
 
   @override
@@ -287,6 +303,7 @@ class DSEncoderV2 implements AbstractDSEncoder {
 }
 
 class UpdateEncoderV2 extends DSEncoderV2 implements AbstractUpdateEncoder {
+  UpdateEncoderV2(super.polyfill);
 
   /**
      * @type {Map<string,number>}
@@ -311,7 +328,7 @@ class UpdateEncoderV2 extends DSEncoderV2 implements AbstractUpdateEncoder {
 
   @override
   Uint8List toUint8Array() {
-    final encoder = encoding.createEncoder();
+    final encoder = encoding.createEncoder(polyfill);
     encoding.writeUint8(encoder, 0); // this is a feature flag that we might use in the future
     encoding.writeVarUint8Array(encoder, this.keyClockEncoder.toUint8Array());
     encoding.writeVarUint8Array(encoder, this.clientEncoder.toUint8Array());

@@ -231,7 +231,7 @@ void removeAwarenessStates(
 Uint8List encodeAwarenessUpdate(Awareness awareness, List<int> clients) {
   final states = awareness.states;
   final len = clients.length;
-  final encoder = encoding.createEncoder();
+  final encoder = encoding.createEncoder(false);
   encoding.writeVarUint(encoder, len);
   for (int i = 0; i < len; i++) {
     final clientID = clients[i];
@@ -257,8 +257,8 @@ Uint8List encodeAwarenessUpdate(Awareness awareness, List<int> clients) {
  */
 Uint8List modifyAwarenessUpdate(
     Uint8List update, dynamic Function(dynamic) modify) {
-  final decoder = decoding.createDecoder(update);
-  final encoder = encoding.createEncoder();
+  final decoder = decoding.createDecoder(update, false);
+  final encoder = encoding.createEncoder(false);
   final len = decoding.readVarUint(decoder);
   encoding.writeVarUint(encoder, len);
   for (int i = 0; i < len; i++) {
@@ -280,7 +280,7 @@ Uint8List modifyAwarenessUpdate(
  */
 void applyAwarenessUpdate(
     Awareness awareness, Uint8List update, dynamic origin) {
-  final decoder = decoding.createDecoder(update);
+  final decoder = decoding.createDecoder(update, false);
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final added = [];
   final updated = [];

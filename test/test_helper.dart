@@ -68,42 +68,42 @@ class EncV1 extends Enc {
 
   @override
   Uint8List encodeStateVector(y.Doc doc) {
-    return y.encodeStateVector(doc);
+    return y.encodeStateVector(false, doc);
   }
 
   @override
   Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]) {
-    return y.encodeStateAsUpdate(doc, encodedTargetStateVector);
+    return y.encodeStateAsUpdate(false, doc, encodedTargetStateVector);
   }
 
   @override
   Uint8List encodeStateVectorFromUpdate(Uint8List update) {
-    return y.encodeStateVectorFromUpdate(update);
+    return y.encodeStateVectorFromUpdate(false, update);
   }
 
   @override
   Uint8List mergeUpdates(Iterable<Uint8List> updates) {
-    return y.mergeUpdates(updates);
+    return y.mergeUpdates(false, updates);
   }
 
   @override
   void applyUpdate(y.Doc ydoc, Uint8List update, [dynamic transactionOrigin]) {
-    y.applyUpdate(ydoc, update, transactionOrigin);
+    y.applyUpdate(false, ydoc, update, transactionOrigin);
   }
 
   @override
   void logUpdate(Uint8List update) {
-    y.logUpdate(update);
+    y.logUpdate(false, update);
   }
 
   @override
   Uint8List diffUpdate(Uint8List update, Uint8List sv) {
-    return y.diffUpdate(update, sv);
+    return y.diffUpdate(false, update, sv);
   }
 
   @override
   (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) {
-    return y.parseUpdateMeta(update);
+    return y.parseUpdateMeta(false, update);
   }
 }
 
@@ -112,42 +112,42 @@ class EncV2 extends Enc {
 
   @override
   Uint8List encodeStateVector(y.Doc doc) {
-    return y.encodeStateVector(doc);
+    return y.encodeStateVector(false, doc);
   }
 
   @override
   Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]) {
-    return y.encodeStateAsUpdateV2(doc, encodedTargetStateVector);
+    return y.encodeStateAsUpdateV2(false, doc, encodedTargetStateVector);
   }
 
   @override
   Uint8List encodeStateVectorFromUpdate(Uint8List update) {
-    return y.encodeStateVectorFromUpdateV2(update);
+    return y.encodeStateVectorFromUpdateV2(false, update);
   }
 
   @override
   Uint8List mergeUpdates(Iterable<Uint8List> updates) {
-    return y.mergeUpdatesV2(updates);
+    return y.mergeUpdatesV2(false, updates);
   }
 
   @override
   void applyUpdate(y.Doc ydoc, Uint8List update, [dynamic transactionOrigin]) {
-    y.applyUpdateV2(ydoc, update, transactionOrigin);
+    y.applyUpdateV2(false,ydoc, update, transactionOrigin);
   }
 
   @override
   void logUpdate(Uint8List update) {
-    y.logUpdateV2(update);
+    y.logUpdateV2(false, update);
   }
 
   @override
   Uint8List diffUpdate(Uint8List update, Uint8List sv) {
-    return y.diffUpdateV2(update, sv);
+    return y.diffUpdateV2(false, update, sv);
   }
-
+  
   @override
   (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) {
-    return y.parseUpdateMetaV2(update);
+    return y.parseUpdateMetaV2(false, update);
   }
 }
 
@@ -174,7 +174,7 @@ class TestYInstance extends y.Doc {
       final update = args[0];
       final origin = args[1];
       if (origin != tc) {
-        final encoder = encoding.createEncoder();
+        final encoder = encoding.createEncoder(false);
         syncProtocol.writeUpdate(encoder, update);
         broadcastMessage(this, encoding.toUint8Array(encoder));
       }
@@ -217,14 +217,14 @@ class TestYInstance extends y.Doc {
   void connect() {
     if (!this.tc.onlineConns.contains(this)) {
       this.tc.onlineConns.add(this);
-      final encoder = encoding.createEncoder();
+      final encoder = encoding.createEncoder(false);
       syncProtocol.writeSyncStep1(encoder, this);
       // publish SyncStep1
       broadcastMessage(this, encoding.toUint8Array(encoder));
       this.tc.onlineConns.forEach((remoteYInstance) {
         if (remoteYInstance != this) {
           // remote instance sends instance to this instance
-          final encoder = encoding.createEncoder();
+          final encoder = encoding.createEncoder(false);
           syncProtocol.writeSyncStep1(encoder, remoteYInstance);
           this._receive(encoding.toUint8Array(encoder), remoteYInstance);
         }
@@ -300,10 +300,10 @@ class TestConnector {
       if (m == null) {
         return this.flushRandomMessage();
       }
-      final encoder = encoding.createEncoder();
+      final encoder = encoding.createEncoder(false);
       // console.log('receive (' + sender.userID + '->' + receiver.userID + '):\n', syncProtocol.stringifySyncMessage(decoding.createDecoder(m), receiver))
       // do not publish data created when this function is executed (could be ss2 or update message)
-      syncProtocol.readSyncMessage(decoding.createDecoder(m), encoder, receiver, receiver.tc);
+      syncProtocol.readSyncMessage(decoding.createDecoder(m, false), encoder, receiver, receiver.tc);
       if (encoding.length(encoder) > 0) {
         // send reply message
         sender._receive(encoding.toUint8Array(encoder), receiver);
@@ -478,7 +478,7 @@ void compare(List users) {
       return item is y.AbstractType ? item.toJSON() : item;
     }
     expect(userTextValues[i].map(mapItem), equals(userTextValues[i + 1].map(mapItem)));
-    expect(y.encodeStateVector(users[i]), equals(y.encodeStateVector(users[i + 1])));
+    expect(y.encodeStateVector(false, users[i]), equals(y.encodeStateVector(false, users[i + 1])));
     y.equalDeleteSets(y.createDeleteSetFromStructStore(users[i].store), 
       y.createDeleteSetFromStructStore(users[i + 1].store));
     compareStructStores(users[i].store, users[i + 1].store);

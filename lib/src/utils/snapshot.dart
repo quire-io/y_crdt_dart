@@ -104,7 +104,7 @@ bool equalSnapshots(Snapshot snap1, Snapshot snap2) {
  * @return {Uint8Array}
  */
 Uint8List encodeSnapshotV2(Snapshot snapshot, AbstractDSEncoder? encoder) {
-  final _encoder = encoder ?? DSEncoderV2();
+  final _encoder = encoder ?? DSEncoderV2(false);
   writeDeleteSet(_encoder, snapshot.ds);
   writeStateVector(_encoder, snapshot.sv);
   return _encoder.toUint8Array();
@@ -115,7 +115,7 @@ Uint8List encodeSnapshotV2(Snapshot snapshot, AbstractDSEncoder? encoder) {
  * @return {Uint8Array}
  */
 Uint8List encodeSnapshot(Snapshot snapshot) =>
-    encodeSnapshotV2(snapshot, DSEncoderV1());
+    encodeSnapshotV2(snapshot, DSEncoderV1(false));
 
 /**
  * @param {Uint8Array} buf
@@ -123,7 +123,7 @@ Uint8List encodeSnapshot(Snapshot snapshot) =>
  * @return {Snapshot}
  */
 Snapshot decodeSnapshotV2(Uint8List buf, [AbstractDSDecoder? decoder]) {
-  final _decoder = decoder ?? DSDecoderV2(decoding.createDecoder(buf));
+  final _decoder = decoder ?? DSDecoderV2(decoding.createDecoder(buf, false));
   return Snapshot(readDeleteSet(_decoder), readStateVector(_decoder));
 }
 
@@ -132,7 +132,7 @@ Snapshot decodeSnapshotV2(Uint8List buf, [AbstractDSDecoder? decoder]) {
  * @return {Snapshot}
  */
 Snapshot decodeSnapshot(Uint8List buf) =>
-    decodeSnapshotV2(buf, DSDecoderV1(decoding.createDecoder(buf)));
+    decodeSnapshotV2(buf, DSDecoderV1(decoding.createDecoder(buf, false)));
 
 /**
  * @param {DeleteSet} ds
@@ -197,7 +197,7 @@ Doc createDocFromSnapshot(Doc originDoc, Snapshot snapshot, [Doc? newDoc]) {
   final ds = snapshot.ds;
   final sv = snapshot.sv;
 
-  final encoder = UpdateEncoderV2();
+  final encoder = UpdateEncoderV2(false);
   originDoc.transact((transaction) {
     var size = 0;
     sv.forEach((_, clock) {
@@ -231,6 +231,6 @@ Doc createDocFromSnapshot(Doc originDoc, Snapshot snapshot, [Doc? newDoc]) {
     writeDeleteSet(encoder, ds);
   });
   final _newDoc = newDoc ?? Doc();
-  applyUpdateV2(_newDoc, encoder.toUint8Array(), "snapshot");
+  applyUpdateV2(false, _newDoc, encoder.toUint8Array(), "snapshot");
   return _newDoc;
 }

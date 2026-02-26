@@ -43,7 +43,9 @@ class Decoder {
   /**
    * @param {Uint8List} Uint8List Binary data to decode
    */
-  Decoder(this.arr);
+  Decoder(this.arr, this.polyfill);
+
+  final bool polyfill;
   /**
      * Decoding target.
      *
@@ -68,7 +70,7 @@ class Decoder {
  * @param {Uint8List} Uint8List
  * @return {Decoder}
  */
-Decoder createDecoder(Uint8List arr) => Decoder(arr);
+Decoder createDecoder(Uint8List arr, bool polyfill) => Decoder(arr, polyfill);
 
 /**
  * @function
@@ -87,7 +89,7 @@ bool hasContent(Decoder decoder) => decoder.pos != decoder.arr.length;
  * @return {Decoder} A clone of `decoder`
  */
 Decoder clone(Decoder decoder, [int? newPos]) {
-  final _decoder = createDecoder(decoder.arr);
+  final _decoder = createDecoder(decoder.arr, decoder.polyfill);
   if (newPos != null) {
     _decoder.pos = newPos;
   }
@@ -350,9 +352,8 @@ int peekVarInt(Decoder decoder) {
  */
 String readVarString(Decoder decoder) {
   //string.utf8TextDecoder ? _readVarStringNative : _readVarStringPolyfill
-  return _readVarStringNative(decoder);
+  return decoder.polyfill ? _readVarStringPolyfill(decoder) : _readVarStringNative(decoder);
 }
-/**
 String _readVarStringPolyfill(Decoder decoder) {
   var remainingLen = readVarUint(decoder);
   if (remainingLen == 0) {
@@ -381,7 +382,6 @@ String _readVarStringPolyfill(Decoder decoder) {
     return Uri.decodeComponent(encodedString);
   }
 }
-*/
 String _readVarStringNative(Decoder decoder) {
   ////** @type any */ (string.utf8TextDecoder).decode(readVarUint8Array(decoder))
   final bytes = readVarUint8Array(decoder);
@@ -500,7 +500,7 @@ class RleDecoder<T extends Object> extends Decoder {
    * @param {Uint8List} Uint8List
    * @param {function(Decoder):T} reader
    */
-  RleDecoder(Uint8List arr, this.reader) : super(arr);
+  RleDecoder(Uint8List arr, this.reader) : super(arr, false);
 
   /**
      * The reader
@@ -533,7 +533,7 @@ class IntDiffDecoder extends Decoder {
    * @param {Uint8List} Uint8List
    * @param {number} start
    */
-  IntDiffDecoder(Uint8List arr, this.s) : super(arr);
+  IntDiffDecoder(Uint8List arr, this.s) : super(arr, false);
   /**
      * Current state
      * @type {number}
@@ -554,7 +554,7 @@ class RleIntDiffDecoder extends Decoder {
    * @param {Uint8List} Uint8List
    * @param {number} start
    */
-  RleIntDiffDecoder(Uint8List arr, this.s) : super(arr);
+  RleIntDiffDecoder(Uint8List arr, this.s) : super(arr, false);
   /**
      * Current state
      * @type {number}
@@ -584,7 +584,7 @@ class UintOptRleDecoder extends Decoder {
   /**
    * @param {Uint8List} Uint8List
    */
-  UintOptRleDecoder(Uint8List arr) : super(arr);
+  UintOptRleDecoder(Uint8List arr) : super(arr, false);
   /**
      * @type {number}
      */
@@ -616,7 +616,7 @@ class IncUintOptRleDecoder extends Decoder {
   /**
    * @param {Uint8List} Uint8List
    */
-  IncUintOptRleDecoder(Uint8List arr) : super(arr);
+  IncUintOptRleDecoder(Uint8List arr) : super(arr, false);
   /**
      * @type {number}
      */
@@ -643,7 +643,7 @@ class IntDiffOptRleDecoder extends Decoder {
   /**
    * @param {Uint8List} Uint8List
    */
-  IntDiffOptRleDecoder(Uint8List arr) : super(arr);
+  IntDiffOptRleDecoder(Uint8List arr) : super(arr, false);
   /**
      * @type {number}
      */

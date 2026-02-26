@@ -79,6 +79,33 @@ void main() {
 
     expect(text1.toDelta(), equals(text2.toDelta()));
   });
+
+  test('sync with BOM', () {
+    final id = 'mytext',
+      yText = y.Doc().getText(id)
+        ..applyDelta([
+          {
+            "insert": "﻿Separate question. What is your availability through May 24?"
+          },
+          {
+            "insert": "\n\n",
+            "attributes": {
+              "blockquote": true
+            }
+          },
+          {
+            "insert": "Thanks,"
+          },
+          {
+            "insert": "\n\n",
+            "attributes": {
+              "blockquote": true
+            }
+          },
+        ]);
+
+    syncDocUpdate(yText.doc!, y.Doc().getText(id).doc!);
+  });
 }
 
 void syncDocUpdate(y.Doc source, y.Doc target) {

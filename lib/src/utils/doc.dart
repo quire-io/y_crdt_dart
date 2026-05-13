@@ -64,8 +64,8 @@ class Doc extends Observable<String> {
    * @param {DocOpts} [opts] configuration
    */
   Doc({String? guid, this.gc = true, this.gcFilter = Doc.defaultGcFilter,
-    this.meta, this.autoLoad = false, this.shouldLoad = true, this.collectionid}): 
-      this.guid = guid ?? _uuid.v4() {
+    this.meta, this.autoLoad = false, this.shouldLoad = true, this.collectionid}) {
+    this.guid = guid ?? _uuid.v4();
     this.clientID = generateNewClientId();
 
     final completer = Completer();

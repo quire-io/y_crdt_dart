@@ -113,7 +113,7 @@ void testClientIdDuplicateChange(t.TestCase _tc) {
   doc2.clientID = 0;
   expect(doc2.clientID, doc1.clientID);
   doc1.getArray('a').insert(0, [1, 2]);
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc1));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc1));
   expect(doc2.clientID != doc1.clientID, true);
 }
 
@@ -125,7 +125,7 @@ void testGetTypeEmptyId(t.TestCase _tc) {
   doc1.getText('').insert(0, 'h');
   doc1.getText().insert(1, 'i');
   final doc2 = y.Doc();
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc1));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc1));
   expect(doc2.getText().toString(), 'hi');
   expect(doc2.getText('').toString(), 'hi');
 }
@@ -217,7 +217,7 @@ void testSubdoc(t.TestCase _tc) {
         subdocs.removed.map((d) => d.guid).toList(), 
         subdocs.loaded.map((d) => d.guid).toList()];
     });
-    y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc));
+    y.applyUpdate(doc2, y.encodeStateAsUpdate(doc));
     expect(event, equals([['a', 'a', 'c'], [], []]));
 
     doc2.getMap('mysubdocs').get('a').load();
@@ -265,7 +265,7 @@ void testSubdocLoadEdgeCases(t.TestCase _tc) {
   ydoc2.on('subdocs', (params) {
     lastEvent = fromSubdocsEventData(params);
   });
-  y.applyUpdate(false, ydoc2, y.encodeStateAsUpdate(false, ydoc));
+  y.applyUpdate(ydoc2, y.encodeStateAsUpdate(ydoc));
   final subdoc3 = ydoc2.getArray().get(0) as y.Doc;
   expect(subdoc3.shouldLoad, false);
   expect(subdoc3.autoLoad, false);
@@ -312,7 +312,7 @@ void testSubdocLoadEdgeCasesAutoload(t.TestCase _tc) {
   ydoc2.on('subdocs', (params) {
     lastEvent = fromSubdocsEventData(params);
   });
-  y.applyUpdate(false, ydoc2, y.encodeStateAsUpdate(false, ydoc));
+  y.applyUpdate(ydoc2, y.encodeStateAsUpdate(ydoc));
   final subdoc3 = ydoc2.getArray().get(0);
   expect(subdoc1.shouldLoad, true);
   expect(subdoc1.autoLoad, true);

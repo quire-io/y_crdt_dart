@@ -147,7 +147,7 @@ class LazyStructReader {
  * @param {Uint8Array} update
  *
  */
-void logUpdate(bool polyfill, Uint8List update) => logUpdateV2(polyfill, update, 
+void logUpdate(Uint8List update) => logUpdateV2(update, 
   (decoder) => UpdateDecoderV1(decoder));
 
 /**
@@ -155,10 +155,10 @@ void logUpdate(bool polyfill, Uint8List update) => logUpdateV2(polyfill, update,
  * @param {typeof UpdateDecoderV2 | typeof UpdateDecoderV1} [YDecoder]
  *
  */
-void logUpdateV2(bool polyfill, Uint8List update, [AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?]) {
+void logUpdateV2(Uint8List update, [AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?]) {
   YDecoder ??= UpdateDecoderV2.new;
   final structs = [];
-  final updateDecoder = YDecoder(decoding.createDecoder(update, polyfill));
+  final updateDecoder = YDecoder(decoding.createDecoder(update));
   final lazyDecoder = LazyStructReader(updateDecoder, false);
   for (var curr = lazyDecoder.curr; curr != null; curr = lazyDecoder.next()) {
     structs.add(curr);
@@ -172,19 +172,19 @@ void logUpdateV2(bool polyfill, Uint8List update, [AbstractUpdateDecoder YDecode
  * @param {Uint8Array} update
  *
  */
-(List<AbstractStruct>, DeleteSet) decodeUpdate(bool polyfill, Uint8List update) 
-  => decodeUpdateV2(polyfill, update, (decoder) => UpdateDecoderV1(decoder));
+(List<AbstractStruct>, DeleteSet) decodeUpdate(Uint8List update) 
+  => decodeUpdateV2(update, (decoder) => UpdateDecoderV1(decoder));
 
 /**
  * @param {Uint8Array} update
  * @param {typeof UpdateDecoderV2 | typeof UpdateDecoderV1} [YDecoder]
  *
  */
-(List<AbstractStruct>, DeleteSet) decodeUpdateV2(bool polyfill, Uint8List update,
+(List<AbstractStruct>, DeleteSet) decodeUpdateV2(Uint8List update, 
     AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?) {
   YDecoder ??= UpdateDecoderV2.new;
   final structs = <AbstractStruct>[];
-  final updateDecoder = YDecoder(decoding.createDecoder(update, polyfill));
+  final updateDecoder = YDecoder(decoding.createDecoder(update));
   final lazyDecoder = LazyStructReader(updateDecoder, false);
   for (var curr = lazyDecoder.curr; curr != null; curr = lazyDecoder.next()) {
     structs.add(curr);
@@ -228,8 +228,8 @@ class LazyStructWriter {
  * @param {Array<Uint8Array>} updates
  * @return {Uint8Array}
  */
-Uint8List mergeUpdates(bool polyfill, Iterable<Uint8List> updates) => mergeUpdatesV2(
-    polyfill, updates, UpdateDecoderV1.new, UpdateEncoderV1.new);
+Uint8List mergeUpdates(Iterable<Uint8List> updates) => mergeUpdatesV2(
+    updates, UpdateDecoderV1.new, UpdateEncoderV1.new);
 
 /**
  * @param {Uint8Array} update
@@ -237,14 +237,14 @@ Uint8List mergeUpdates(bool polyfill, Iterable<Uint8List> updates) => mergeUpdat
  * @param {typeof UpdateDecoderV1 | typeof UpdateDecoderV2} YDecoder
  * @return {Uint8Array}
  */
-Uint8List encodeStateVectorFromUpdateV2(bool polyfill, Uint8List update, [
-    AbstractDSEncoder YEncoder(bool polyfill)?,
+Uint8List encodeStateVectorFromUpdateV2(Uint8List update, [
+    AbstractDSEncoder YEncoder()?,
     AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?,]) {
   YDecoder ??= UpdateDecoderV2.new;
   YEncoder ??= UpdateEncoderV2.new;
 
-  final encoder = YEncoder(polyfill);
-  final updateDecoder = LazyStructReader(YDecoder(decoding.createDecoder(update, polyfill)), false);
+  final encoder = YEncoder();
+  final updateDecoder = LazyStructReader(YDecoder(decoding.createDecoder(update)), false);
   var curr = updateDecoder.curr;
   if (curr != null) {
     var size = 0;
@@ -279,7 +279,7 @@ Uint8List encodeStateVectorFromUpdateV2(bool polyfill, Uint8List update, [
       encoding.writeVarUint(encoder.restEncoder, currClock);
     }
     // prepend the size of the state vector
-    final enc = encoding.createEncoder(polyfill);
+    final enc = encoding.createEncoder();
     encoding.writeVarUint(enc, size);
     encoding.writeBinaryEncoder(enc, encoder.restEncoder);
     encoder.restEncoder = enc;
@@ -294,15 +294,15 @@ Uint8List encodeStateVectorFromUpdateV2(bool polyfill, Uint8List update, [
  * @param {Uint8Array} update
  * @return {Uint8Array}
  */
-Uint8List encodeStateVectorFromUpdate (bool polyfill, Uint8List update) 
-  => encodeStateVectorFromUpdateV2(polyfill, update, DSEncoderV1.new, UpdateDecoderV1.new);
+Uint8List encodeStateVectorFromUpdate (Uint8List update) 
+  => encodeStateVectorFromUpdateV2(update, DSEncoderV1.new, UpdateDecoderV1.new);
 
 /**
  * @param {Uint8Array} update
  * @param {typeof UpdateDecoderV1 | typeof UpdateDecoderV2} YDecoder
  * @return {{ from: Map<number,number>, to: Map<number,number> }}
  */
-(Map<int, int>, Map<int, int>) parseUpdateMetaV2(bool polyfill, Uint8List update, 
+(Map<int, int>, Map<int, int>) parseUpdateMetaV2(Uint8List update, 
     [AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?]) {
   YDecoder ??= UpdateDecoderV2.new;
   /**
@@ -313,7 +313,7 @@ Uint8List encodeStateVectorFromUpdate (bool polyfill, Uint8List update)
    * @type {Map<number, number>}
    */
   final to = <int, int>{};
-  final updateDecoder = LazyStructReader(YDecoder(decoding.createDecoder(update, polyfill)), false);
+  final updateDecoder = LazyStructReader(YDecoder(decoding.createDecoder(update)), false);
   var curr = updateDecoder.curr;
   if (curr != null) {
     var currClient = curr.id.client;
@@ -342,8 +342,8 @@ Uint8List encodeStateVectorFromUpdate (bool polyfill, Uint8List update)
  * @param {Uint8Array} update
  * @return {{ from: Map<number,number>, to: Map<number,number> }}
  */
-(Map<int, int>, Map<int, int>) parseUpdateMeta(bool polyfill, Uint8List update) 
-  => parseUpdateMetaV2(polyfill, update, UpdateDecoderV1.new);
+(Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) 
+  => parseUpdateMetaV2(update, UpdateDecoderV1.new);
 
 /**
  * This method is intended to slice any kind of struct and retrieve the right part.
@@ -390,18 +390,16 @@ class _Write {
  * @param {typeof UpdateEncoderV1 | typeof UpdateEncoderV2} [YEncoder]
  * @return {Uint8Array}
  */
-Uint8List mergeUpdatesV2(bool polyfill, Iterable<Uint8List> updates, [
+Uint8List mergeUpdatesV2(Iterable<Uint8List> updates, [
     AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?,
-    AbstractUpdateEncoder YEncoder(bool polyfill)?]) {
+    AbstractUpdateEncoder YEncoder()?]) {
   YDecoder ??= UpdateDecoderV2.new;
   YEncoder ??= UpdateEncoderV2.new;
   if (updates.length == 1) {
     return updates.first;
   }
-  final updateDecoders = updates.map((update) 
-    => YDecoder!(decoding.createDecoder(update, polyfill))).toList();
-  var lazyStructDecoders = updateDecoders.map((decoder) 
-    => LazyStructReader(decoder, true)).toList();
+  final updateDecoders = updates.map((update) => YDecoder!(decoding.createDecoder(update))).toList();
+  var lazyStructDecoders = updateDecoders.map((decoder) => LazyStructReader(decoder, true)).toList();
 
   /**
    * @todo we don't need offset because we always slice before
@@ -409,7 +407,7 @@ Uint8List mergeUpdatesV2(bool polyfill, Iterable<Uint8List> updates, [
    */
   _Write? currWrite;
 
-  final updateEncoder = YEncoder(polyfill);
+  final updateEncoder = YEncoder();
   // write structs lazily
   final lazyStructEncoder = LazyStructWriter(updateEncoder);
 
@@ -534,16 +532,16 @@ Uint8List mergeUpdatesV2(bool polyfill, Iterable<Uint8List> updates, [
  * @param {typeof UpdateDecoderV1 | typeof UpdateDecoderV2} [YDecoder]
  * @param {typeof UpdateEncoderV1 | typeof UpdateEncoderV2} [YEncoder]
  */
-Uint8List diffUpdateV2(bool polyfill, Uint8List update, Uint8List sv, [
+Uint8List diffUpdateV2(Uint8List update, Uint8List sv, [
     AbstractUpdateDecoder YDecoder(decoding.Decoder decoder)?,
-    AbstractUpdateEncoder YEncoder(bool polyfill)?,]) {
+    AbstractUpdateEncoder YEncoder()?,]) {
   YDecoder ??= UpdateDecoderV2.new;
   YEncoder ??= UpdateEncoderV2.new;
 
-  final state = decodeStateVector(polyfill, sv);
-  final encoder = YEncoder(polyfill);
+  final state = decodeStateVector(sv);
+  final encoder = YEncoder();
   final lazyStructWriter = LazyStructWriter(encoder);
-  final decoder = YDecoder(decoding.createDecoder(update, polyfill));
+  final decoder = YDecoder(decoding.createDecoder(update));
   final reader = LazyStructReader(decoder, false);
   while (reader.curr != null) {
     final curr = reader.curr!;
@@ -579,8 +577,8 @@ Uint8List diffUpdateV2(bool polyfill, Uint8List update, Uint8List sv, [
  * @param {Uint8Array} update
  * @param {Uint8Array} sv
  */
-Uint8List diffUpdate(bool polyfill, Uint8List update, Uint8List sv) 
-  => diffUpdateV2(polyfill, update, sv, UpdateDecoderV1.new, UpdateEncoderV1.new);
+Uint8List diffUpdate(Uint8List update, Uint8List sv) 
+  => diffUpdateV2(update, sv, UpdateDecoderV1.new, UpdateEncoderV1.new);
 
 /**
  * @param {LazyStructWriter} lazyWriter
@@ -588,7 +586,7 @@ Uint8List diffUpdate(bool polyfill, Uint8List update, Uint8List sv)
 void flushLazyStructWriter(LazyStructWriter lazyWriter) {
   if (lazyWriter.written > 0) {
     lazyWriter.clientStructs.add(PartStructs(lazyWriter.written, encoding.toUint8Array(lazyWriter.encoder.restEncoder)));
-    lazyWriter.encoder.restEncoder = encoding.createEncoder(lazyWriter.encoder.polyfill);
+    lazyWriter.encoder.restEncoder = encoding.createEncoder();
     lazyWriter.written = 0;
   }
 }
@@ -654,10 +652,10 @@ void finishLazyStructWriting(LazyStructWriter lazyWriter) {
  */
 Uint8List convertUpdateFormat (Uint8List update, AbstractStruct blockTransformer(AbstractStruct block), 
     AbstractUpdateDecoder YDecoder(decoding.Decoder decoder), 
-    AbstractUpdateEncoder YEncoder(bool polyfill)) {
-  final updateDecoder = YDecoder(decoding.createDecoder(update, false));
+    AbstractUpdateEncoder YEncoder()) {
+  final updateDecoder = YDecoder(decoding.createDecoder(update));
   final lazyDecoder = LazyStructReader(updateDecoder, false);
-  final updateEncoder = YEncoder(false);
+  final updateEncoder = YEncoder();
   final lazyWriter = LazyStructWriter(updateEncoder);
   for (var curr = lazyDecoder.curr; curr != null; curr = lazyDecoder.next()) {
     writeStructToLazyStructWriter(lazyWriter, blockTransformer(curr), 0);

@@ -36,8 +36,7 @@ import 'package:y_crdt/src/lib0/decoding.dart' show isNegativeZero, rightShift;
  * A BinaryEncoder handles the encoding to an Uint8Array.
  */
 class Encoder {
-  Encoder(this.polyfill);
-  final bool polyfill;
+  Encoder();
   int cpos = 0;
   Uint8List cbuf = Uint8List(100);
   /**
@@ -55,7 +54,7 @@ class Encoder {
  * @function
  * @return {Encoder}
  */
-Encoder createEncoder(bool polyfill) => Encoder(polyfill);
+Encoder createEncoder() => Encoder();
 
 /**
  * The current length of the encoded data.
@@ -309,13 +308,10 @@ void writeVarString(Encoder encoder, String str) {
   ///(string.utf8TextEncoder && /** @type {any} */ 
   /// (string.utf8TextEncoder).encodeInto) 
   /// ? _writeVarStringNative : _writeVarStringPolyfill
-  if (encoder.polyfill) {
-    _writeVarStringPolyfill(encoder, str);
-  } else {
-    _writeVarStringNative(encoder, str);
-  }
+  _writeVarStringNative(encoder, str);
 }
 
+/**
 void _writeVarStringPolyfill(Encoder encoder, String str) {
   // TODO:
   // final encodedString = unescape(encodeURIComponent(str));
@@ -326,6 +322,7 @@ void _writeVarStringPolyfill(Encoder encoder, String str) {
     write(encoder, /** @type {number} */ encodedString.codeUnitAt(i));
   }
 }
+*/
 
 /**
  * A cache to store strings temporarily
@@ -586,7 +583,7 @@ class RleEncoder<T> extends Encoder {
   /**
    * @param {function(Encoder, T):void} writer
    */
-  RleEncoder(this.w): super(false);
+  RleEncoder(this.w);
   /**
      * Current state
      * @type {T|null}
@@ -638,7 +635,7 @@ class IntDiffEncoder extends Encoder {
   /**
    * @param {number} start
    */
-  IntDiffEncoder(this.s): super(false);
+  IntDiffEncoder(this.s);
   /**
      * Current state
      * @type {number}
@@ -665,7 +662,7 @@ class RleIntDiffEncoder extends Encoder {
   /**
    * @param {number} start
    */
-  RleIntDiffEncoder(this.s): super(false);
+  RleIntDiffEncoder(this.s);
   /**
      * Current state
      * @type {number}
@@ -723,7 +720,7 @@ void flushUintOptRleEncoder(UintOptRleEncoder encoder) {
  */
 class UintOptRleEncoder {
   UintOptRleEncoder();
-  final encoder = Encoder(false);
+  final encoder = Encoder();
   /**
      * @type {number}
      */
@@ -767,7 +764,7 @@ class UintOptRleEncoder {
 class IncUintOptRleEncoder implements UintOptRleEncoder {
   IncUintOptRleEncoder();
   @override
-  final encoder = Encoder(false);
+  final encoder = Encoder();
   /**
      * @type {number}
      */
@@ -843,7 +840,7 @@ void flushIntDiffOptRleEncoder(IntDiffOptRleEncoder encoder) {
  */
 class IntDiffOptRleEncoder {
   IntDiffOptRleEncoder();
-  final encoder = Encoder(false);
+  final encoder = Encoder();
   /**
      * @type {number}
      */
@@ -911,7 +908,7 @@ class StringEncoder {
   }
 
   Uint8List toUint8Array() {
-    final encoder = Encoder(false);
+    final encoder = Encoder();
     this.sarr.add(this.s);
     this.s = '';
     writeVarString(encoder, this.sarr.join(''));

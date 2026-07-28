@@ -89,12 +89,12 @@ Future testPermanentUserData(t.TestCase tc) async {
   ydoc2.getText().insert(0, 'hxxi');
   ydoc2.getText().delete(1, 2);
   await Future.delayed(Duration(milliseconds: 10));
-  applyUpdate(false,ydoc2, encodeStateAsUpdate(false, ydoc1));
-  applyUpdate(false, ydoc1, encodeStateAsUpdate(false, ydoc2));
+  applyUpdate(ydoc2, encodeStateAsUpdate(ydoc1));
+  applyUpdate(ydoc1, encodeStateAsUpdate(ydoc2));
 
   // now sync a third doc with same name as doc1 and then create PermanentUserData
   final ydoc3 = y.Doc();
-  applyUpdate(false, ydoc3, encodeStateAsUpdate(false, ydoc1));
+  applyUpdate(ydoc3, encodeStateAsUpdate(ydoc1));
   final pd3 = PermanentUserData(ydoc3);
   pd3.setUserMapping(ydoc3, ydoc3.clientID, 'user a');
 }
@@ -112,7 +112,7 @@ void testDiffStateVectorOfUpdateIsEmpty(t.TestCase tc) {
   ydoc.getText().insert(0, 'a');
   ydoc.on('update', (params) {
     final update = params[0] as Uint8List;
-    sv = y.encodeStateVectorFromUpdate(false, update);
+    sv = y.encodeStateVectorFromUpdate(update);
   });
   // should produce an update with an empty state vector (because previous ops are missing)
   ydoc.getText().insert(0, 'a');
@@ -136,9 +136,9 @@ void testDiffStateVectorOfUpdateIgnoresSkips(t.TestCase tc) {
   ydoc.getText().insert(0, 'a');
   ydoc.getText().insert(0, 'b');
   ydoc.getText().insert(0, 'c');
-  final update13 = y.mergeUpdates(false, [updates[0], updates[2]]);
-  final sv = y.encodeStateVectorFromUpdate(false, update13);
-  final state = y.decodeStateVector(false, sv);
+  final update13 = y.mergeUpdates([updates[0], updates[2]]);
+  final sv = y.encodeStateVectorFromUpdate(update13);
+  final state = y.decodeStateVector(sv);
   expect(state.get(ydoc.clientID), 1);
   expect(state.length, 1);
 }

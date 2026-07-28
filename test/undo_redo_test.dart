@@ -160,7 +160,7 @@ void testInconsistentFormat() {
   {
     final initialYDoc = initializeYDoc();
     final yDoc = y.Doc(gc: false);
-    y.applyUpdate(false, yDoc, y.encodeStateAsUpdate(false, initialYDoc));
+    y.applyUpdate(yDoc, y.encodeStateAsUpdate(initialYDoc));
     testYjsMerge(yDoc);
   }
 }
@@ -256,10 +256,10 @@ void testRejectUpdateExample(t.TestCase _tc) {
   final tmpydoc1 = y.Doc();
   tmpydoc1.getArray('restricted').insert(0, [1]);
   tmpydoc1.getArray('public').insert(0, [1]);
-  final update1 = y.encodeStateAsUpdate(false, tmpydoc1);
+  final update1 = y.encodeStateAsUpdate(tmpydoc1);
   final tmpydoc2 = y.Doc();
   tmpydoc2.getArray('public').insert(0, [2]);
-  final update2 = y.encodeStateAsUpdate(false, tmpydoc2);
+  final update2 = y.encodeStateAsUpdate(tmpydoc2);
 
   final ydoc = y.Doc();
   final restrictedType = ydoc.getArray('restricted');
@@ -283,7 +283,7 @@ void testRejectUpdateExample(t.TestCase _tc) {
     final beforePendingDs = ydoc.store.pendingDs;
     final beforePendingStructs = ydoc.store.pendingStructs?.update;
     try {
-      y.applyUpdate(false, ydoc, update, 'remote change');
+      y.applyUpdate(ydoc, update, 'remote change');
     } finally {
       while (um.undoStack.isNotEmpty) {
         um.undo();
@@ -292,7 +292,7 @@ void testRejectUpdateExample(t.TestCase _tc) {
       ydoc.store.pendingDs = beforePendingDs;
       ydoc.store.pendingStructs = null;
       if (beforePendingStructs != null) {
-        y.applyUpdateV2(false, ydoc, beforePendingStructs);
+        y.applyUpdateV2(ydoc, beforePendingStructs);
       }
     }
   }
@@ -582,8 +582,8 @@ void testUndoDeleteFilter(t.TestCase tc) {
 void testUndoUntilChangePerformed(t.TestCase _tc) {
   final doc = y.Doc();
   final doc2 = y.Doc();
-  doc.on('update', (args) => y.applyUpdate(false, doc2, args[0] as Uint8List));
-  doc2.on('update', (args) => y.applyUpdate(false, doc, args[0] as Uint8List));
+  doc.on('update', (args) => y.applyUpdate(doc2, args[0] as Uint8List));
+  doc2.on('update', (args) => y.applyUpdate(doc, args[0] as Uint8List));
 
   final yArray = doc.getArray('array');
   final yArray2 = doc2.getArray('array');
@@ -827,19 +827,19 @@ void testUndoDeleteTextFormat(t.TestCase _tc) {
   text.insert(0, 'Attack ships on fire off the shoulder of Orion.');
   final doc2 = y.Doc();
   final text2 = doc2.getText();
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc));
   final undoManager = y.UndoManager(text);
 
   text.format(13, 7, { 'bold': true });
   undoManager.stopCapturing();
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc));
 
   text.format(16, 4, { 'bold': null });
   undoManager.stopCapturing();
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc));
 
   undoManager.undo();
-  y.applyUpdate(false, doc2, y.encodeStateAsUpdate(false, doc));
+  y.applyUpdate(doc2, y.encodeStateAsUpdate(doc));
 
   final result = [
     { 'insert': 'Attack ships ' },
@@ -862,8 +862,8 @@ void testUndoDeleteTextFormat(t.TestCase _tc) {
 void testBehaviorOfIgnoreremotemapchangesProperty(t.TestCase _tc) {
   final doc = y.Doc();
   final doc2 = y.Doc();
-  doc.on('update', (args) => y.applyUpdate(false, doc2, args[0] as Uint8List, doc));
-  doc2.on('update', (args) => y.applyUpdate(false, doc, args[0] as Uint8List, doc2));
+  doc.on('update', (args) => y.applyUpdate(doc2, args[0] as Uint8List, doc));
+  doc2.on('update', (args) => y.applyUpdate(doc, args[0] as Uint8List, doc2));
   final map1 = doc.getMap();
   final map2 = doc2.getMap();
   final um1 = y.UndoManager(map1, ignoreRemoteMapChanges: true);

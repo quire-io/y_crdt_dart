@@ -109,8 +109,8 @@ void main() {
 }
 
 void syncDocUpdate(y.Doc source, y.Doc target) {
-  var stateVector = y.encodeStateVector(false, target),
-    diff = y.encodeStateAsUpdate(false, source, stateVector);
+  var stateVector = y.encodeStateVector(target),
+    diff = y.encodeStateAsUpdate(source, stateVector);
 
-  y.applyUpdate(false, target, diff, stateVector);
+  y.applyUpdate(target, diff, stateVector);
 }

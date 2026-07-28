@@ -48,7 +48,7 @@ const messageYjsUpdate = 2;
  */
 void writeSyncStep1(encoding.Encoder encoder, Y.Doc doc) {
   encoding.writeVarUint(encoder, messageYjsSyncStep1);
-  final sv = Y.encodeStateVector(encoder.polyfill, doc);
+  final sv = Y.encodeStateVector(doc);
   encoding.writeVarUint8Array(encoder, sv);
 }
 
@@ -65,7 +65,7 @@ void writeSyncStep2(
   encoding.writeVarUint(encoder, messageYjsSyncStep2);
   encoding.writeVarUint8Array(
     encoder,
-    Y.encodeStateAsUpdate(encoder.polyfill, doc, encodedStateVector),
+    Y.encodeStateAsUpdate(doc, encodedStateVector),
   );
 }
 
@@ -87,9 +87,9 @@ void readSyncStep1(
  * @param {Y.Doc} doc
  * @param {any} transactionOrigin
  */
-void readSyncStep2(bool polyfill, 
+void readSyncStep2(
     decoding.Decoder decoder, Y.Doc doc, dynamic transactionOrigin) {
-  Y.applyUpdate(polyfill, doc, decoding.readVarUint8Array(decoder), transactionOrigin);
+  Y.applyUpdate(doc, decoding.readVarUint8Array(decoder), transactionOrigin);
 }
 
 /**
@@ -124,10 +124,10 @@ int readSyncMessage(decoding.Decoder decoder, encoding.Encoder encoder,
       readSyncStep1(decoder, encoder, doc);
       break;
     case messageYjsSyncStep2:
-      readSyncStep2(decoder.polyfill, decoder, doc, transactionOrigin);
+      readSyncStep2(decoder, doc, transactionOrigin);
       break;
     case messageYjsUpdate:
-      readUpdate(decoder.polyfill, decoder, doc, transactionOrigin);
+      readUpdate(decoder, doc, transactionOrigin);
       break;
     default:
       throw Exception("Unknown message type");

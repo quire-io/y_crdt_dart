@@ -64,48 +64,48 @@ class EncDoc extends Enc {
 
   @override
   Uint8List encodeStateVector(y.Doc doc) {
-    return y.encodeStateVector(false, doc);
+    return y.encodeStateVector(doc);
   }
 
   @override
   Uint8List encodeStateAsUpdate(y.Doc doc, [Uint8List? encodedTargetStateVector]) {
-    return y.encodeStateAsUpdateV2(false, doc, encodedTargetStateVector);
+    return y.encodeStateAsUpdateV2(doc, encodedTargetStateVector);
   }
 
   @override
   Uint8List encodeStateVectorFromUpdate(Uint8List update) {
-    return y.encodeStateVectorFromUpdateV2(false, update);
+    return y.encodeStateVectorFromUpdateV2(update);
   }
 
   @override
   Uint8List mergeUpdates(Iterable<Uint8List> updates) {
     final ydoc = y.Doc(gc: false);
     updates.forEach((update) {
-      y.applyUpdateV2(false, ydoc, update);
+      y.applyUpdateV2(ydoc, update);
     });
-    return y.encodeStateAsUpdateV2(false, ydoc); 
+    return y.encodeStateAsUpdateV2(ydoc); 
   }
 
   @override
   void applyUpdate(y.Doc ydoc, Uint8List update, [dynamic transactionOrigin]) {
-    y.applyUpdateV2(false, ydoc, update, transactionOrigin);
+    y.applyUpdateV2(ydoc, update, transactionOrigin);
   }
 
   @override
   void logUpdate(Uint8List update) {
-    y.logUpdateV2(false, update);
+    y.logUpdateV2(update);
   }
 
   @override
   Uint8List diffUpdate(Uint8List update, Uint8List sv) {
     final ydoc = y.Doc(gc: false);
-    y.applyUpdateV2(false, ydoc, update);
-    return y.encodeStateAsUpdateV2(false, ydoc, sv);
+    y.applyUpdateV2(ydoc, update);
+    return y.encodeStateAsUpdateV2(ydoc, sv);
   }
 
   @override
   (Map<int, int>, Map<int, int>) parseUpdateMeta(Uint8List update) {
-    return y.parseUpdateMetaV2(false, update);
+    return y.parseUpdateMetaV2(update);
   }
 }
 
@@ -156,8 +156,8 @@ void testKeyEncoding(t.TestCase tc) {
   text0.insert(0, 'b');
   text0.insert(0, 'c', { 'italic': true });
 
-  final update = y.encodeStateAsUpdateV2(false, users[0]);
-  y.applyUpdateV2(false, users[1], update);
+  final update = y.encodeStateAsUpdateV2(users[0]);
+  y.applyUpdateV2(users[1], update);
 
   expect(text1.toDelta(), equals([
     { 'insert': 'c', 'attributes': { 'italic': true } },
@@ -218,7 +218,7 @@ void checkUpdateCases(y.Doc ydoc, List<Uint8List> updates, Enc enc, bool hasDele
       for (var j = 1; j < updates.length; j++) {
         final partMerged = enc.mergeUpdates(updates.sublist(j));
         final partMeta = enc.parseUpdateMeta(partMerged);
-        final targetSV = y.encodeStateVectorFromUpdateV2(false, y.mergeUpdatesV2(false, updates.sublist(0, j)));
+        final targetSV = y.encodeStateVectorFromUpdateV2(y.mergeUpdatesV2(updates.sublist(0, j)));
         final diffed = enc.diffUpdate(mergedUpdates, targetSV);
         final diffedMeta = enc.parseUpdateMeta(diffed);
         expect(partMeta, equals(diffedMeta));
@@ -227,15 +227,15 @@ void checkUpdateCases(y.Doc ydoc, List<Uint8List> updates, Enc enc, bool hasDele
           //  - expect(diffed, mergedDeletes)
           // because diffed contains the set of all deletes.
           // So we add all deletes from `diffed` to `partDeletes` and compare then
-          final decoder = decoding.createDecoder(diffed, false);
+          final decoder = decoding.createDecoder(diffed);
           final updateDecoder = UpdateDecoderV2(decoder);
           readClientsStructRefs(updateDecoder, y.Doc());
           final ds = readDeleteSet(updateDecoder);
-          final updateEncoder = UpdateEncoderV2(false);
+          final updateEncoder = UpdateEncoderV2();
           encoding.writeVarUint(updateEncoder.restEncoder, 0); // 0 structs
           writeDeleteSet(updateEncoder, ds);
           final deletesUpdate = updateEncoder.toUint8Array();
-          final mergedDeletes = y.mergeUpdatesV2(false, [deletesUpdate, partMerged]);
+          final mergedDeletes = y.mergeUpdatesV2([deletesUpdate, partMerged]);
           if (!hasDeletes || enc != encDoc) {
             // deletes will almost definitely lead to different encoders because of the mergeStruct feature that is present in encDoc
             expect(diffed, equals(mergedDeletes));
@@ -315,30 +315,30 @@ void testMergePendingUpdates(t.TestCase tc) {
   yText.applyDelta([{ 'insert': 'n' }]);
 
   final yDoc1 = y.Doc();
-  y.applyUpdate(false, yDoc1, serverUpdates[0]);
-  final update1 = y.encodeStateAsUpdate(false, yDoc1);
+  y.applyUpdate(yDoc1, serverUpdates[0]);
+  final update1 = y.encodeStateAsUpdate(yDoc1);
 
   final yDoc2 = y.Doc();
-  y.applyUpdate(false, yDoc2, update1);
-  y.applyUpdate(false, yDoc2, serverUpdates[1]);
-  final update2 = y.encodeStateAsUpdate(false, yDoc2);
+  y.applyUpdate(yDoc2, update1);
+  y.applyUpdate(yDoc2, serverUpdates[1]);
+  final update2 = y.encodeStateAsUpdate(yDoc2);
 
   final yDoc3 = y.Doc();
-  y.applyUpdate(false, yDoc3, update2);
-  y.applyUpdate(false, yDoc3, serverUpdates[3]);
-  final update3 = y.encodeStateAsUpdate(false, yDoc3);
+  y.applyUpdate(yDoc3, update2);
+  y.applyUpdate(yDoc3, serverUpdates[3]);
+  final update3 = y.encodeStateAsUpdate(yDoc3);
 
   final yDoc4 = y.Doc();
-  y.applyUpdate(false, yDoc4, update3);
-  y.applyUpdate(false, yDoc4, serverUpdates[2]);
-  final update4 = y.encodeStateAsUpdate(false, yDoc4);
+  y.applyUpdate(yDoc4, update3);
+  y.applyUpdate(yDoc4, serverUpdates[2]);
+  final update4 = y.encodeStateAsUpdate(yDoc4);
 
   final yDoc5 = y.Doc();
-  y.applyUpdate(false, yDoc5, update4);
-  y.applyUpdate(false, yDoc5, serverUpdates[4]);
+  y.applyUpdate(yDoc5, update4);
+  y.applyUpdate(yDoc5, serverUpdates[4]);
   // @ts-ignore
   // ignore: unused_local_variable
-  final _update5 = y.encodeStateAsUpdate(false, yDoc5); // eslint-disable-line
+  final _update5 = y.encodeStateAsUpdate(yDoc5); // eslint-disable-line
 
   final yText5 = yDoc5.getText('textBlock');
   expect(yText5.toString(), 'nenor');
@@ -365,9 +365,9 @@ void testObfuscateUpdates(t.TestCase _tc) {
   subtype.setAttribute('attr', 'val');
   yarray.insert(0, ['teststring', 42, subtype, subdoc]);
   // obfuscate the content and put it into a new document
-  final obfuscatedUpdate = y.obfuscateUpdate(y.encodeStateAsUpdate(false, ydoc));
+  final obfuscatedUpdate = y.obfuscateUpdate(y.encodeStateAsUpdate(ydoc));
   final odoc = y.Doc();
-  y.applyUpdate(false, odoc, obfuscatedUpdate);
+  y.applyUpdate(odoc, obfuscatedUpdate);
   final otext = odoc.getText('text');
   final omap = odoc.getMap('map');
   final oarray = odoc.getArray('array');
